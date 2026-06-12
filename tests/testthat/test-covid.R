@@ -141,3 +141,16 @@ test_that("no-look-ahead holds with the COVID treatment active", {
   td <- transform_data(raw, spec)
   expect_true(test_no_lookahead(td, spec, cfg))
 })
+
+test_that("covid quarter matching is robust to within-quarter date stamps", {
+  # real panel stamps quarter STARTS (2020-01-01); synthetic stamps 2020-03-01
+  cfg <- cfg0
+  dates_real <- seq(as.Date("2019-01-01"), by = "quarter", length.out = 10)
+  cq <- covid_quarters_in(dates_real, cfg)
+  expect_length(cq, 3)        # 2020Q1-Q3 configured as 03-01/06-01/09-01
+  s <- covid_s_path(dates_real, cq, scales = c(10, 20, 5), rho = 0.5)
+  expect_equal(s[dates_real == as.Date("2020-01-01")], 10)
+  expect_equal(s[dates_real == as.Date("2020-04-01")], 20)
+  expect_equal(s[dates_real == as.Date("2020-07-01")], 5)
+  expect_equal(s[dates_real == as.Date("2020-10-01")], 3)   # 1 + 4*0.5
+})

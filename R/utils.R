@@ -19,7 +19,7 @@ load_config <- function(path = "config/config.yml") {
 config_hash <- function(cfg, r_dir = "R") {
   est_files <- file.path(r_dir, paste0(
     c("utils", "data_sources", "transforms", "priors", "engines",
-      "forecast", "benchmarks", "evaluate"), ".R"))
+      "forecast", "benchmarks", "evaluate", "covid"), ".R"))
   est_files <- est_files[file.exists(est_files)]
   code <- vapply(est_files,
                  function(f) digest::digest(file = f, algo = "xxhash64"), "")

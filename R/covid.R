@@ -21,12 +21,21 @@
 # The SV engine is NOT weighted: it gets t-distributed errors instead (see
 # engines.R / DECISIONS.md D17), per CCMM (SV-t ~ SVO-t) and Hartwig (2024).
 
+#' Quarter index (year*4 + quarter): all date comparisons in this module are
+#' done at quarter granularity, because the real panel stamps quarters at
+#' their start (2020-01-01) while the synthetic panel stamps them mid-quarter
+#' (2020-03-01) -- exact-date matching would silently disable the treatment.
+.qidx <- function(d) {
+  d <- as.Date(d)
+  as.integer(format(d, "%Y")) * 4L + (as.integer(format(d, "%m")) - 1L) %/% 3L
+}
+
 #' Which configured COVID quarters fall inside the estimation window.
 covid_quarters_in <- function(dates, cfg) {
   if (is.null(cfg$covid) || identical(cfg$covid$treatment, "none"))
     return(as.Date(character(0)))
   q <- as.Date(unlist(cfg$covid$quarters))
-  q[q <= max(dates)]
+  q[.qidx(q) <= max(.qidx(dates))]
 }
 
 #' Volatility path s_t over the sample dates given per-quarter scales and the
@@ -34,10 +43,11 @@ covid_quarters_in <- function(dates, cfg) {
 covid_s_path <- function(dates, cq, scales, rho) {
   s <- rep(1, length(dates))
   if (!length(cq)) return(s)
-  for (i in seq_along(cq)) s[dates == cq[i]] <- scales[i]
-  after <- which(dates > max(cq))
+  di <- .qidx(dates); qi <- .qidx(cq)
+  for (i in seq_along(qi)) s[di == qi[i]] <- scales[i]
+  after <- which(di > max(qi))
   if (length(after) && scales[length(scales)] > 1) {
-    j <- seq_along(after)
+    j <- di[after] - max(qi)
     s[after] <- 1 + (scales[length(scales)] - 1) * rho^j
   }
   pmax(s, 1)
@@ -47,7 +57,8 @@ covid_s_path <- function(dates, cq, scales, rho) {
 #' predictive shocks at COVID-era origins -- the LP forecasting payoff).
 covid_s_future <- function(dates, H, cq, scales, rho) {
   if (!length(cq) || scales[length(scales)] <= 1) return(rep(1, H))
-  j0 <- sum(dates > max(cq))               # quarters already elapsed past T0
+  j0 <- max(.qidx(dates)) - max(.qidx(cq))   # quarters elapsed past T0
+  j0 <- max(j0, 0)
   1 + (scales[length(scales)] - 1) * rho^(j0 + seq_len(H))
 }
 

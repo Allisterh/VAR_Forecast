@@ -365,3 +365,18 @@ posteriors than untreated ones on synthetic ground truth; the dummy limit is
 insensitive to the exact tiny weight; no-look-ahead holds with the treatment
 active. **Config:** `covid.*`.
 
+**Empirical result (real Australian data, 2026-06-13).** Recursive ML
+estimates of the scales stabilise at (1, 8, 4) for 2020Q1–Q3 — 2020Q1 was
+normal in Australia, the residual sd in 2020Q2 was ~8× normal, 2020Q3 ~4×.
+Comparing `lp_scaling` vs `none` over the same 36-origin evaluation
+(`reports/covid_treatment_comparison.csv`): at COVID-era forecast origins
+(2020Q1–2022Q4) CRPS improves for *every* treated member — ratios 0.89
+(loose member) to 0.97, GDP-growth CRPS −7 % — and the pooled combinations
+gain 0.16–0.25 nats of mean log predictive density; at all other origins the
+treatment is a no-op (ratios 0.98–1.00), confirming the adjustment only
+binds where it should (Álvarez–Odendahl's pre-specified-dates principle).
+Two constant-volatility members lose a little log score at COVID origins
+while gaining CRPS — wider LP tails cost log density when the realization is
+central; this is the known CRPS/log-score divergence on outlier windows and
+is why both are reported.
+
