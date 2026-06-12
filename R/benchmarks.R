@@ -93,48 +93,59 @@ ffbs_local_level <- function(y, s2e, s2u, tau0 = y[1], P0 = 10 * var(y)) {
   tau
 }
 
-#' UCSV per variable via Gibbs: FFBS for the trend, stochvol updates for both
-#' log-variance processes.
+#' UC-SV per variable via Gibbs: FFBS for the trend; stochastic volatility with
+#' t-distributed errors on the transitory component (outlier-robust,
+#' Lenza-Primiceri spirit); CONSTANT trend-shock variance with a conjugate
+#' inverse-gamma update. The canonical twin-SV UCSV mixes pathologically when a
+#' COVID-sized outlier sits at the sample endpoint (trend-vs-noise attribution
+#' is bimodal and the trend-vol process piles up near zero); a direct IG draw
+#' for the trend variance removes that dimension entirely. See DECISIONS.md D9.
 fit_ucsv <- function(y, cfg) {
   ndraw <- cfg$mcmc$ndraw; nburn <- cfg$mcmc$nburn
-  pspec <- stochvol::specify_priors(
+  thin <- if (is.null(cfg$mcmc$bench_thin)) 1 else cfg$mcmc$bench_thin
+  # tight vol-of-vol prior (mean 0.04): Stock-Watson fix gamma ~ 0.2; a loose
+  # prior lets an endpoint outlier inflate sigma_eta and the 12-step variance
+  # forecast explodes through exp(h/2) compounding
+  pspec_e <- stochvol::specify_priors(
     mu = stochvol::sv_normal(0, 10),
     phi = stochvol::sv_beta(20, 1.5),
-    sigma2 = stochvol::sv_gamma(0.5, 0.5))
+    sigma2 = stochvol::sv_gamma(2, 50),
+    nu = stochvol::sv_exponential(0.1))
   fits <- lapply(seq_len(ncol(y)), function(j) {
     z <- y[, j]; Tn <- length(z)
     tau <- stats::filter(z, rep(1 / 8, 8), sides = 1)
     tau[is.na(tau)] <- z[is.na(tau)]
     tau <- as.numeric(tau)
-    he <- rep(log(var(z) / 2 + 1e-8), Tn); hu <- rep(log(var(z) / 20 + 1e-8), Tn)
-    pe <- list(mu = he[1], phi = 0.9, sigma = 0.2, nu = Inf, rho = 0, beta = 0,
+    he <- rep(log(var(z) / 2 + 1e-8), Tn)
+    mix_e <- rep(1, Tn)                       # t-mixing weights, transitory eq
+    # informative IG prior keeps the trend-shock variance off zero:
+    # mean ~ 2% of series variance, ~10 prior "observations"
+    a0 <- 5; b0 <- (a0 - 1) * 0.02 * var(z)
+    s2u <- b0 / (a0 - 1)
+    pe <- list(mu = he[1], phi = 0.9, sigma = 0.2, nu = 10, rho = 0, beta = 0,
                latent0 = he[1])
-    pu <- list(mu = hu[1], phi = 0.9, sigma = 0.2, nu = Inf, rho = 0, beta = 0,
-               latent0 = hu[1])
-    tauT <- numeric(ndraw); heT <- numeric(ndraw); huT <- numeric(ndraw)
-    pe_d <- matrix(NA_real_, ndraw, 3); pu_d <- matrix(NA_real_, ndraw, 3)
-    for (it in seq_len(nburn + ndraw)) {
-      tau <- ffbs_local_level(z, exp(he), exp(hu))
+    tauT <- numeric(ndraw); heT <- numeric(ndraw); s2uT <- numeric(ndraw)
+    pe_d <- matrix(NA_real_, ndraw, 4)
+    for (it in seq_len(nburn + ndraw * thin)) {
+      tau <- ffbs_local_level(z, exp(he) * mix_e, rep(s2u, Tn))
       eres <- z - tau
-      ures <- c(diff(tau)[1], diff(tau))   # u_1 approximated by u_2
+      ures <- diff(tau)
+      # conjugate IG update for the constant trend-shock variance
+      s2u <- 1 / rgamma(1, a0 + length(ures) / 2, b0 + sum(ures^2) / 2)
       ue <- stochvol::svsample_fast_cpp(eres, draws = 1, burnin = 0,
-        priorspec = pspec, startpara = pe, startlatent = he)
+        priorspec = pspec_e, startpara = pe, startlatent = he, keeptau = TRUE)
       he <- drop(ue$latent[1, ])
+      mix_e <- drop(ue$tau[1, ])
       pe$mu <- ue$para[1, "mu"]; pe$phi <- ue$para[1, "phi"]
-      pe$sigma <- ue$para[1, "sigma"]; pe$latent0 <- he[1]
-      uu <- stochvol::svsample_fast_cpp(ures, draws = 1, burnin = 0,
-        priorspec = pspec, startpara = pu, startlatent = hu)
-      hu <- drop(uu$latent[1, ])
-      pu$mu <- uu$para[1, "mu"]; pu$phi <- uu$para[1, "phi"]
-      pu$sigma <- uu$para[1, "sigma"]; pu$latent0 <- hu[1]
-      if (it > nburn) {
-        d <- it - nburn
-        tauT[d] <- tau[Tn]; heT[d] <- he[Tn]; huT[d] <- hu[Tn]
-        pe_d[d, ] <- c(pe$mu, pe$phi, pe$sigma)
-        pu_d[d, ] <- c(pu$mu, pu$phi, pu$sigma)
+      pe$sigma <- ue$para[1, "sigma"]; pe$nu <- ue$para[1, "nu"]
+      pe$latent0 <- he[1]
+      if (it > nburn && (it - nburn) %% thin == 0) {
+        d <- (it - nburn) %/% thin
+        tauT[d] <- tau[Tn]; heT[d] <- he[Tn]; s2uT[d] <- s2u
+        pe_d[d, ] <- c(pe$mu, pe$phi, pe$sigma, pe$nu)
       }
     }
-    list(tauT = tauT, heT = heT, huT = huT, pe = pe_d, pu = pu_d)
+    list(tauT = tauT, heT = heT, s2uT = s2uT, pe = pe_d)
   })
   ess <- min(vapply(fits, function(f) as.numeric(coda::effectiveSize(f$tauT)),
                     numeric(1)))
@@ -152,13 +163,14 @@ simulate_paths.post_ucsv <- function(post, y, h, ndraw, condition = NULL) {
     f <- post$fits[[j]]
     for (d in seq_len(ndraw)) {
       k <- ((d - 1) %% post$ndraw) + 1
-      tau <- f$tauT[k]; he <- f$heT[k]; hu <- f$huT[k]
-      pe <- f$pe[k, ]; pu <- f$pu[k, ]
+      tau <- f$tauT[k]; he <- f$heT[k]; s2u <- f$s2uT[k]
+      pe <- f$pe[k, ]
+      nu <- f$pe[k, 4]
       for (s in seq_len(h)) {
-        hu <- pu[1] + pu[2] * (hu - pu[1]) + pu[3] * rnorm(1)
         he <- pe[1] + pe[2] * (he - pe[1]) + pe[3] * rnorm(1)
-        tau <- tau + exp(hu / 2) * rnorm(1)
-        paths[d, s, j] <- tau + exp(he / 2) * rnorm(1)
+        tau <- tau + sqrt(s2u) * rnorm(1)
+        eps <- if (is.finite(nu)) rt(1, df = nu) else rnorm(1)
+        paths[d, s, j] <- tau + exp(he / 2) * eps
       }
     }
   }

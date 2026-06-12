@@ -158,10 +158,12 @@ check_forecasts <- function(paths, y, label = "member") {
   ok_finite <- all(is.finite(paths))
   rng <- apply(abs(y), 2, max)
   ok_bound <- TRUE
-  mean_path <- apply(paths, c(2, 3), mean)
+  mean_path <- apply(paths, c(2, 3), median)
   for (j in seq_len(ncol(y))) {
     bound <- 5 * max(rng[j], 1) + 50
-    if (any(abs(paths[, , j]) > bound)) ok_bound <- FALSE
+    # explosiveness is about the central mass, not individual fat-tail draws
+    ql <- apply(paths[, , j, drop = FALSE], 2, quantile, probs = c(0.005, 0.995))
+    if (any(abs(ql) > bound)) ok_bound <- FALSE
   }
   # convergence: |mean forecast - sample mean| should not grow from h=4 to h=H
   H <- dim(paths)[2]

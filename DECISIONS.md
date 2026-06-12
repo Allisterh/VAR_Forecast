@@ -156,16 +156,28 @@ pull that fails without network; the variant is wired in config via the
 `alt_foreign` set but not in the default suite, so the offline run stays
 green). **Config:** `suite`, `benchmarks`.
 
-## D9. UCSV applied per target variable
+## D9. UCSV applied per target variable, outlier-robust specification
 
-**Choice.** The Stock–Watson UCSV model (local level, independent SV on
-permanent and transitory shocks, FFBS + stochvol updates) is run for *each*
-target variable, not just inflation.
+**Choice.** A UC-SV model (local level + FFBS) is run for *each* target
+variable, not just inflation, with three deliberate deviations from the
+canonical twin-SV Stock–Watson form, all forced by COVID-sized outliers in the
+evaluation window:
+(i) **t-distributed transitory errors** (`nu ~ Exp(0.1)` via stochvol) — the
+Gaussian version goes sticky (trend ESS ≈ 2) at origins where the outlier is
+the sample endpoint;
+(ii) **constant trend-shock variance with a conjugate IG update** instead of a
+second SV process — the trend-vol dimension is where the endpoint
+trend-vs-noise bimodality piles up, and a direct Gibbs draw removes it;
+(iii) **tight vol-of-vol prior** (`sigma2 ~ Gamma(2, 50)`, mean 0.04) — the
+Stock–Watson tradition *fixes* the vol smoothing parameter near 0.2; a loose
+prior lets an endpoint outlier inflate vol-of-vol and the 12-step-ahead
+variance forecast explodes through exp(h/2) compounding (observed: 99.5%
+unemployment quantiles in the hundreds). Updated 2026-06-12 after the first
+full synthetic run failed the convergence gate at origins 117–120.
 
-**Why.** It is the canonical inflation benchmark, and as a generic
-trend-plus-noise-with-SV model it is also a sensible univariate density
-benchmark for the other targets; restricting it to inflation would leave the
-other variables with fewer density-capable anchors. **Config:** `benchmarks`.
+**Why per target.** It is the canonical inflation benchmark, and as a generic
+trend-plus-noise-with-SV model it is a sensible univariate density anchor for
+the other targets too. **Config:** `benchmarks`, `mcmc.bench_*`.
 
 ## D10. Combination: linear pools, per variable × horizon bucket, shrunk
 
