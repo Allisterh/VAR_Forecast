@@ -13,11 +13,17 @@ load_config <- function(path = "config/config.yml") {
   cfg
 }
 
-#' Hash of the config sections that affect estimation, used to key the OOS cache.
-config_hash <- function(cfg) {
-  digest::digest(cfg[c("master_seed", "data", "synthetic", "variables",
-                       "horizons", "mcmc", "glp", "suite", "benchmarks",
-                       "evaluation")], algo = "xxhash64")
+#' Hash of the config sections that affect estimation PLUS the R sources,
+#' used to key the OOS cache (a config-only key would serve stale results
+#' after code changes).
+config_hash <- function(cfg, r_dir = "R") {
+  code <- if (dir.exists(r_dir)) {
+    vapply(sort(list.files(r_dir, pattern = "\\.R$", full.names = TRUE)),
+           function(f) digest::digest(file = f, algo = "xxhash64"), "")
+  } else character(0)
+  digest::digest(list(cfg[c("master_seed", "data", "synthetic", "variables",
+                            "horizons", "mcmc", "glp", "suite", "benchmarks",
+                            "evaluation")], code), algo = "xxhash64")
 }
 
 #' Set up the logger once per session.
@@ -61,6 +67,7 @@ build_transform_spec <- function(cfg) {
       sets       = paste(unlist(x$sets), collapse = ","),
       provider   = x$source$provider,
       series_id  = x$source$id,
+      pre        = if (is.null(x$source$pre)) "" else x$source$pre,
       target     = isTRUE(x$target),
       year_ended = isTRUE(x$year_ended),
       stringsAsFactors = FALSE

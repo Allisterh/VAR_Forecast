@@ -24,15 +24,17 @@ simulate_paths.post_rw <- function(post, y, h, ndraw, condition = NULL) {
   paths
 }
 
-#' Bayesian AR(p) per variable: conjugate normal-inverse-gamma with a loose
-#' ridge prior; iterated density forecasts.
+#' Bayesian AR(p) per variable: conjugate normal-inverse-gamma with
+#' Minnesota-style lag shrinkage (sd = 0.5/lag); iterated density forecasts.
+#' A flat ridge lets near-unit oscillatory coefficient draws resonate off
+#' COVID-sized outliers in the initial conditions.
 fit_ar <- function(y, cfg, p = 4) {
   fits <- lapply(seq_len(ncol(y)), function(j) {
     z <- y[, j]
     xy <- build_XY(matrix(z, ncol = 1), p)
     X <- xy$X; Y <- drop(xy$Y)
     K <- ncol(X)
-    V0inv <- diag(c(1e-4, rep(1, p)))         # loose on intercept, unit ridge on lags
+    V0inv <- diag(c(1e-4, (seq_len(p) / 0.5)^2))  # loose intercept, sd 0.5/l on lag l
     P <- crossprod(X) + V0inv
     cP <- chol(P)
     bhat <- backsolve(cP, forwardsolve(t(cP), crossprod(X, Y)))
@@ -54,7 +56,16 @@ simulate_paths.post_ar <- function(post, y, h, ndraw, condition = NULL) {
     z <- y[, j]
     for (d in seq_len(ndraw)) {
       sig2 <- f$s2 * f$df / rchisq(1, f$df)
-      beta <- f$bhat + sqrt(sig2) * backsolve(f$cP, rnorm(p + 1))
+      # stationarity-truncated posterior: an explosive AR draw compounds over
+      # 12 iterated steps (seen at origins straddling the COVID outlier)
+      for (try in 1:20) {
+        beta <- f$bhat + sqrt(sig2) * backsolve(f$cP, rnorm(p + 1))
+        rt_ <- max(Mod(polyroot(c(1, -beta[-1]))))
+        if (1 / rt_ < 1.0) break
+        if (try == 20) {
+          beta[-1] <- beta[-1] * 0.95 / (1 / rt_)
+        }
+      }
       st <- z[length(z) - seq_len(p) + 1]      # most recent first
       for (s in seq_len(h)) {
         ynew <- sum(c(1, st) * beta) + sqrt(sig2) * rnorm(1)

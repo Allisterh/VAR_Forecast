@@ -32,7 +32,7 @@ default:
       ss_mean: 0.45
       ss_sd: 0.25
       sets: [small, medium]
-      source: {provider: dbnomics, id: "FED/G17/IP.B50001.S.Q"}
+      source: {provider: dbnomics, id: "IMF/IFS/Q.US.AIP_IX"}
       target: false
     f_act_tw:
       label: "World activity (trade-weighted, OECD+Asia proxy)"
@@ -42,7 +42,7 @@ default:
       ss_mean: 0.70
       ss_sd: 0.25
       sets: [alt_foreign]
-      source: {provider: dbnomics, id: "OECD/QNA/G-20.B1_GE.GPSA.Q"}
+      source: {provider: dbnomics, id: "OECD/QNA/G-20.B1_GE.GPSA.Q", pre: pct_change}
       target: false
     f_comm:
       label: "Commodity prices (RBA ICP, SDR)"
@@ -62,7 +62,7 @@ default:
       ss_mean: 2.5
       ss_sd: 1.0
       sets: [small, medium, alt_foreign]
-      source: {provider: dbnomics, id: "FED/H15/RIFSPFF_N.Q"}
+      source: {provider: dbnomics, id: "FED/H15/RIFSPFF_N.M"}
       target: false
     gdp_growth:
       label: "Real GDP growth (qtr %)"
@@ -83,7 +83,7 @@ default:
       ss_mean: 0.625
       ss_sd: 0.15
       sets: [small, medium, alt_foreign]
-      source: {provider: rba, id: "GCPIOCPMTMQP"}
+      source: {provider: rba, id: "GCPIOCPMTMQP", pre: pct_change}
       target: true
       year_ended: true
     unemp_rate:
@@ -126,7 +126,7 @@ default:
       ss_mean: ~
       ss_sd: 10.0
       sets: [medium]
-      source: {provider: abs, id: "A2303731T", catalogue: "5206.0"}
+      source: {provider: abs, id: "A2304200A", catalogue: "5206.0"}
       target: false
     wpi_growth:
       label: "Wage price index growth (qtr %)"

@@ -201,8 +201,10 @@ download_real_data <- function(cfg, spec, raw_dir = "data/raw") {
   # quarterly panel on a common date index
   qs <- lapply(names(series), function(v) {
     q <- to_quarterly(series[[v]])
-    # trimmed-mean CPI arrives as qtr % change: cumulate to an index level
-    if (v == "cpi_inflation") q$value <- 100 * exp(cumsum(q$value / 100))
+    # series published as a qtr % change (e.g. trimmed-mean CPI, G20 GDP
+    # growth) are cumulated to an index so the uniform dlog transform applies
+    if (identical(spec$pre[spec$variable == v], "pct_change"))
+      q$value <- 100 * exp(cumsum(q$value / 100))
     names(q)[2] <- v
     q
   })
