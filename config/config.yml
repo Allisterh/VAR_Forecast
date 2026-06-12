@@ -136,7 +136,7 @@ default:
       ss_mean: 0.80
       ss_sd: 0.20
       sets: [medium]
-      source: {provider: abs, id: "A2603609J", catalogue: "6345.0"}
+      source: {provider: abs, id: "A2713849C", catalogue: "6345.0"}
       target: false
     emp_growth:
       label: "Employment growth (qtr %)"
