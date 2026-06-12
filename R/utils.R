@@ -148,3 +148,15 @@ ar_sigmas <- function(y, plag = 4) {
 
 #' Quarterly date sequence helper.
 quarter_seq <- function(start, n) seq(as.Date(start), by = "quarter", length.out = n)
+
+#' Load all project functions into the global env (idempotent). Needed inside
+#' parallel workers: S3 methods reached via UseMethod are invisible to the
+#' automatic globals detection of future/furrr.
+ensure_project_loaded <- function(dir = "R") {
+  if (isTRUE(get0(".soe_loaded", envir = globalenv(), ifnotfound = FALSE)))
+    return(invisible())
+  for (f in list.files(dir, pattern = "\\.R$", full.names = TRUE))
+    sys.source(f, envir = globalenv())
+  assign(".soe_loaded", TRUE, envir = globalenv())
+  invisible()
+}

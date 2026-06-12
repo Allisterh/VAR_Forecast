@@ -1,0 +1,213 @@
+---
+title: "A Bayesian VAR Suite for Forecasting the Australian Economy"
+subtitle: "Block-exogenous small-open-economy BVARs, pooled density forecasts, 1–12 quarters ahead"
+date: today
+format:
+  html:
+    toc: true
+    embed-resources: true
+    fig-align: center
+execute:
+  echo: false
+  warning: false
+---
+
+```{r setup}
+suppressPackageStartupMessages({library(knitr)})
+tabdir <- "../output/tables"; figdir <- "../output/figures"
+rd <- function(f) read.csv(file.path(tabdir, f), stringsAsFactors = FALSE)
+spec    <- rd("transform_spec.csv")
+scores  <- rd("scores_by_horizon.csv")
+diag    <- rd("diagnostics.csv")
+wfinal  <- rd("final_weights.csv")
+dm      <- tryCatch(rd("dm_tests.csv"), error = function(e) NULL)
+fc      <- read.csv("../output/forecasts/forecast_table.csv")
+is_synth <- "synthetic" %in% spec$provider == FALSE  # placeholder; overwritten below
+src <- yaml::read_yaml("../config/config.yml")$default$data$source
+```
+
+## 1. What this is
+
+This report documents a suite of Bayesian VARs for forecasting the key
+Australian macroeconomic aggregates 1–12 quarters ahead, combined into a single
+pooled **density** forecast. Australia is modelled as a **small open economy**:
+every VAR member partitions the system into a foreign block (world activity,
+commodity prices, the foreign policy rate) and a domestic block, and **block
+exogeneity** forbids domestic variables from feeding back into the foreign
+block (Cushman & Zha 1997; Zha 1999), at lags and contemporaneously. This is
+imposed in estimation (not just on impulse responses) and verified numerically
+(§6).
+
+**Data source for this run:** `r src`. `r if (identical(src, "synthetic")) "All results below are produced from the synthetic block-exogenous DGP, which exists so that the pipeline runs end-to-end offline; the *relative* model rankings are informative about the machinery, not about Australia. Re-run with `data.source: real` for substantive results." else "Results are based on final-vintage published data; real-time vintages are not used, so revisions-sensitive comparisons (especially for GDP) should be read with care."`
+
+## 2. Data and transformations
+
+The `transform_spec` table is the single source of truth mapping each series to
+its transform, Minnesota own-lag prior mean (`delta`), block, and steady-state
+prior anchor (used by the Villani members).
+
+```{r}
+kable(spec[, c("variable","label","block","transform","delta","ss_mean","ss_sd")],
+      digits = 2)
+```
+
+Growth-type series enter as 100·Δlog with `delta = 0`; rates and 100·log
+levels enter with `delta = 1` plus sum-of-coefficients and
+dummy-initial-observation priors in selected members to discipline the I(1)
+behaviour at long horizons.
+
+## 3. The suite
+
+Seven block-exogenous VARs spanning prior family (Minnesota vs steady-state),
+size (8-variable SOE core vs 13-variable medium), tightness (GLP-style
+marginal-likelihood-selected λ vs fixed tight/loose), lag length (2/4/5) and
+volatility (constant vs stochastic), plus four univariate anchors (random walk,
+AR(4), UCSV, unconditional mean). All members are estimated recursively at
+every forecast origin and produce predictive **draws** for every target
+variable and horizon, so they pool cleanly.
+
+## 4. Evaluation design
+
+Pseudo-real-time expanding-window evaluation: at each origin *t* every member
+sees only data through *t* — including the data-driven tightness selection,
+which is re-run inside each origin. Combination weights at *t* use only scores
+whose realization was observable at *t* (`s + h ≤ t`). Both properties are
+enforced structurally and verified by automated tests (§6). Densities are
+scored with the log score and CRPS (`scoringRules`), points with RMSE, and
+calibration with PIT histograms, all by horizon, for quarterly and year-ended
+transforms.
+
+## 5. Results
+
+### 5.1 Density accuracy by horizon
+
+Mean CRPS by horizon (lower is better), members vs pooled combinations:
+
+```{r, results="asis"}
+for (v in unique(fc$variable)) {
+  f <- file.path(figdir, sprintf("crps_by_h_%s.png", v))
+  if (file.exists(f)) cat(sprintf("![](%s){width=85%%}\n\n", f))
+}
+```
+
+```{r}
+tab <- scores[scores$measure == "q" & scores$h %in% c(1, 4, 8, 12), ]
+tab <- reshape(tab[, c("member","variable","h","crps")],
+               idvar = c("member","variable"), timevar = "h", direction = "wide")
+kable(tab[order(tab$variable, tab$crps.1), ], digits = 3,
+      caption = "Mean CRPS at h = 1, 4, 8, 12 (quarterly transforms)")
+```
+
+```{r}
+lsx <- scores[scores$measure == "q" & scores$h %in% c(1, 4, 8, 12), ]
+lsx <- reshape(lsx[, c("member","variable","h","logdens")],
+               idvar = c("member","variable"), timevar = "h", direction = "wide")
+kable(lsx[order(lsx$variable, -lsx$logdens.1), ], digits = 2,
+      caption = "Mean log predictive density at h = 1, 4, 8, 12 (higher = better)")
+```
+
+### 5.2 Significance
+
+Diebold–Mariano tests (Harvey-corrected, Newey–West lag h−1) against the AR(4)
+and random-walk benchmarks; stars on CRPS differentials (`***` 1%, `**` 5%,
+`*` 10%).
+
+```{r}
+if (!is.null(dm) && nrow(dm)) {
+  d1 <- dm[dm$h %in% c(1, 4, 8) & dm$measure == "q" &
+           grepl("^combo_", dm$member), ]
+  kable(d1[order(d1$variable, d1$h), c("member","reference","variable","h",
+        "dm_crps","p_crps","sig_crps")], digits = 3, row.names = FALSE,
+        caption = "DM tests: combinations vs univariate benchmarks")
+}
+```
+
+### 5.3 Which models earn weight where
+
+Final-origin combination weights (optimal pool, shrunk toward equal), by
+variable and horizon bucket:
+
+```{r}
+wp <- wfinal[wfinal$scheme == "pool", ]
+wp <- reshape(wp[, c("variable","bucket","member","weight")],
+              idvar = c("member"), timevar = "bucket",
+              direction = "wide", ids = "member")
+kable(aggregate(weight ~ member + bucket, data = wfinal[wfinal$scheme=="pool",],
+                FUN = mean), digits = 3,
+      caption = "Optimal-pool weights averaged over target variables")
+```
+
+The BMA diagnostic (predictive-likelihood weights, no shrinkage) shows which
+single member the data favour — by construction it concentrates and is **not**
+the recommended combination:
+
+```{r}
+kable(aggregate(weight ~ member, data = wfinal[wfinal$scheme=="bma",], FUN = mean),
+      digits = 3, caption = "BMA diagnostic weights (averaged over variables/buckets)")
+```
+
+```{r, results="asis"}
+fs <- list.files(figdir, pattern = "^weights_pool_.*near", full.names = TRUE)
+for (f in fs) cat(sprintf("![](%s){width=85%%}\n\n", f))
+```
+
+### 5.4 Calibration
+
+PIT histograms by member (h = 1 and h = 4): a calibrated density forecast has
+uniform PITs. Hump-shaped histograms indicate over-dispersion, U-shapes
+under-dispersion.
+
+```{r, results="asis"}
+for (f in c("pit_h1.png", "pit_h4.png")) {
+  p <- file.path(figdir, f)
+  if (file.exists(p)) cat(sprintf("![](%s){width=95%%}\n\n", p))
+}
+```
+
+### 5.5 Current forecasts
+
+Fan charts from the optimal-pool combination at the final origin:
+
+```{r, results="asis"}
+fs <- list.files(figdir, pattern = "^fan_pool_", full.names = TRUE)
+for (f in fs) cat(sprintf("![](%s){width=85%%}\n\n", f))
+```
+
+```{r}
+cb <- fc[fc$member == "combo_pool", ]
+kable(cb[cb$h %in% c(1, 2, 4, 8, 12), c("variable","h","point","lo90","hi90")],
+      digits = 2, row.names = FALSE,
+      caption = "Combined (optimal pool) forecasts: median and 90% interval")
+```
+
+## 6. Diagnostics
+
+Section-9 self-checks, enforced as a hard gate in the pipeline:
+
+```{r}
+kable(diag, digits = 4)
+```
+
+- **Block exogeneity binds:** max |posterior-mean coefficient of a domestic lag
+  inside a foreign equation| across all members and origins is
+  `r format(max(diag$block_exog_max), digits = 2)` (engines with structural
+  zeros report exactly 0).
+- **No look-ahead:** corrupting all post-origin data leaves every forecast
+  draw bit-identical.
+- **Reproducibility:** re-running an origin with the same master seed gives
+  identical draws.
+
+## 7. Honest limitations
+
+- **Final-vintage data.** The evaluation is pseudo-real-time on (for real runs)
+  final data; genuine real-time vintages would change GDP-related rankings.
+- **Combination gains are modest by design.** Equal weights are hard to beat
+  (the combination puzzle); the payoff we target is *calibration and
+  robustness*, not large point-forecast gains, and the tables should be read
+  that way — where a single member beats the pools at a given horizon, the
+  honest summary is that the pool buys insurance, not accuracy.
+- **Conditional forecasts** use hard substitution, not Waggoner–Zha shock
+  redistribution; they are a convenience hook, not a policy-scenario tool.
+- **The synthetic DGP** is block-exogenous and Gaussian-with-outliers; it
+  validates machinery (recovery of the block structure, calibration under a
+  known truth), not Australian dynamics.

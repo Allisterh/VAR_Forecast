@@ -176,7 +176,9 @@ default:
     nburn: 300
     forecast_draws: 1000       # predictive draws per member per origin
     store_draws: 300           # thinned draws persisted per origin for pooling
-    block_exog_prior_sd: 1.0e-5  # prior sd on domestic lags in foreign equations
+    bench_ndraw: 800           # univariate benchmarks mix fast; fewer draws
+    bench_nburn: 200
+    block_exog_prior_sd: 1.0e-4  # prior sd on domestic lags in foreign equations
 
   # GLP-style data-driven overall tightness: marginal-likelihood grid search
   # on the conjugate engine; selected lambda is reused by Gibbs members
