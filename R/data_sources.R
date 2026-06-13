@@ -128,9 +128,10 @@ generate_synthetic_data <- function(cfg, spec) {
 }
 
 # ---- real ----------------------------------------------------------------------
-
-#' FRED fallback ids for foreign series when DBnomics fails and a key is present.
-.fred_fallback <- c(f_act = "INDPRO", f_rate = "FEDFUNDS")
+#
+# The foreign block is FRED-primary (GDPC1, FEDFUNDS) and Australian data comes
+# from RBA/ABS. There is deliberately NO silent series substitution: a download
+# failure errors loudly rather than swapping in a different concept.
 
 #' Pull one series from its provider; returns data.frame(date, value) at native
 #' frequency. Errors are caught by the caller.
@@ -142,6 +143,12 @@ fetch_series <- function(v, src, cfg) {
   } else if (provider == "abs") {
     x <- readabs::read_abs(series_id = src$id)
     data.frame(date = as.Date(x$date), value = x$value)
+  } else if (provider == "fred") {
+    # key is validated and set once in download_real_data
+    x <- fredr::fredr(series_id = src$id)
+    x <- x[!is.na(x$value), ]
+    if (nrow(x) == 0) stop("FRED series '", src$id, "' returned no observations")
+    data.frame(date = as.Date(x$date), value = x$value)
   } else if (provider == "dbnomics") {
     x <- rdbnomics::rdb(ids = src$id)
     x <- x[!is.na(x$value), ]
@@ -149,12 +156,22 @@ fetch_series <- function(v, src, cfg) {
   } else stop("unknown provider: ", provider)
 }
 
-#' Quarterly aggregation: average of observations within the quarter.
-to_quarterly <- function(df) {
+#' Quarterly aggregation: average of observations within the quarter, but
+#' COVERAGE-AWARE -- a quarter with materially fewer source observations than a
+#' full quarter (a partial trailing/leading quarter at the data frontier) is
+#' returned as NA rather than a 1-2-month/half-quarter average that would
+#' silently enter the panel. NA partial quarters are then dropped (if trailing)
+#' or error (if interior) downstream, never silently averaged.
+to_quarterly <- function(df, min_coverage = 0.8) {
+  df <- df[is.finite(df$value), , drop = FALSE]
   q <- as.Date(cut(df$date, "quarter"))
-  agg <- aggregate(value ~ q, data = data.frame(q = q, value = df$value), FUN = mean)
-  names(agg) <- c("date", "value")
-  agg
+  m <- tapply(df$value, q, mean)
+  n <- tapply(df$value, q, length)
+  dates <- as.Date(names(m))
+  expected <- max(n)                       # fullest quarter (1 qtrly, 3 mthly, ~63 daily)
+  value <- as.numeric(m)
+  value[as.integer(n) < min_coverage * expected] <- NA_real_
+  data.frame(date = dates, value = value)
 }
 
 #' Download all series with on-disk caching; fall back per-series to FRED if a
@@ -163,39 +180,49 @@ to_quarterly <- function(df) {
 download_real_data <- function(cfg, spec, raw_dir = "data/raw") {
   dir.create(raw_dir, recursive = TRUE, showWarnings = FALSE)
   manifest_path <- file.path(raw_dir, "manifest.csv")
-  fred_key <- Sys.getenv(cfg$data$fred_api_key_env, "")
   rows <- list(); series <- list()
+  if (any(spec$provider == "fred")) {
+    if (!requireNamespace("fredr", quietly = TRUE))
+      stop("package 'fredr' is required for FRED series; run renv::restore().")
+    key <- Sys.getenv(cfg$data$fred_api_key_env, "")
+    if (!nzchar(key))
+      stop("FRED series configured but ", cfg$data$fred_api_key_env,
+           " is not set. Put it in .Renviron (gitignored).")
+    fredr::fredr_set_key(key)
+  }
 
   for (i in seq_len(nrow(spec))) {
     v <- spec$variable[i]
     src <- list(provider = spec$provider[i], id = spec$series_id[i])
     cache_file <- file.path(raw_dir, paste0(v, ".rds"))
-    fresh <- file.exists(cache_file) &&
+    # cache is keyed by variable name, so it must also record the provider+id
+    # it was pulled with -- otherwise changing a series ID silently serves
+    # stale data (a production footgun). A cache hit requires fresh AND a
+    # matching (provider, id).
+    cached <- if (file.exists(cache_file)) readRDS(cache_file) else NULL
+    cache_ok <- !is.null(cached) && is.list(cached) &&
+      identical(cached$provider, src$provider) &&
+      identical(cached$id, src$id) &&
       difftime(Sys.time(), file.mtime(cache_file), units = "days") <
         cfg$data$cache_max_age_days
-    if (fresh) {
-      logger::log_info("cache hit: {v}")
-      series[[v]] <- readRDS(cache_file)
+    if (cache_ok) {
+      logger::log_info("cache hit: {v} ({src$provider}:{src$id})")
+      series[[v]] <- cached$data
     } else {
       df <- tryCatch(fetch_series(v, src, cfg), error = function(e) {
         logger::log_warn("download failed for {v} ({src$provider}:{src$id}): {conditionMessage(e)}")
         NULL
       })
-      if (is.null(df) && v %in% names(.fred_fallback) && nzchar(fred_key)) {
-        logger::log_info("trying FRED fallback for {v}")
-        df <- tryCatch({
-          fredr::fredr_set_key(fred_key)
-          x <- fredr::fredr(series_id = .fred_fallback[[v]])
-          data.frame(date = as.Date(x$date), value = x$value)
-        }, error = function(e) NULL)
-      }
       if (is.null(df)) stop("Could not obtain series '", v, "' (", src$provider, ":",
-                            src$id, "). Set data.source: synthetic to run offline.")
-      saveRDS(df, cache_file)
+                            src$id, "). Fix the source or set data.source: synthetic to run offline.")
+      saveRDS(list(provider = src$provider, id = src$id, data = df,
+                   pulled = as.character(Sys.Date())), cache_file)
       series[[v]] <- df
     }
     rows[[v]] <- data.frame(variable = v, provider = src$provider,
-                            series_id = src$id, pulled = as.character(Sys.Date()))
+                            series_id = src$id,
+                            last_obs = as.character(max(series[[v]]$date)),
+                            pulled = as.character(Sys.Date()))
   }
 
   # quarterly panel on a common date index
@@ -204,9 +231,20 @@ download_real_data <- function(cfg, spec, raw_dir = "data/raw") {
     # series published as a qtr % change (e.g. trimmed-mean CPI, G20 GDP
     # growth) are cumulated to an index so the uniform dlog transform applies;
     # cumprod treats the published number as an arithmetic % change (exact),
-    # the subsequent dlog yields log growth consistent with the other series
-    if (identical(spec$pre[spec$variable == v], "pct_change"))
-      q$value <- 100 * cumprod(1 + q$value / 100)
+    # the subsequent dlog yields log growth consistent with the other series.
+    # cumprod propagates any interior NA across the whole tail, which would
+    # silently shorten the panel -- so require a contiguous finite support and
+    # error loudly on an interior gap (never silently truncate).
+    if (identical(spec$pre[spec$variable == v], "pct_change")) {
+      stopifnot(identical(spec$transform[spec$variable == v], "dlog"))
+      fin <- which(is.finite(q$value))
+      if (length(fin)) {
+        span <- min(fin):max(fin)
+        if (anyNA(q$value[span]))
+          stop("interior NA in pct_change series '", v, "' before cumulation")
+        q$value[span] <- 100 * cumprod(1 + q$value[span] / 100)
+      }
+    }
     names(q)[2] <- v
     q
   })

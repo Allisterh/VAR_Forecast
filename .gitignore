@@ -7,3 +7,4 @@ output/
 .RData
 renv/library/
 renv/staging/
+.Renviron

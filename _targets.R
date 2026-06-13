@@ -1,9 +1,13 @@
 # _targets.R -- pipeline definition ---------------------------------------------
 library(targets)
 
+# .Renviron (gitignored) supplies FRED_API_KEY for the foreign block
+if (file.exists(".Renviron")) readRenviron(".Renviron")
+
 tar_option_set(
   packages = c("yaml", "logger", "digest", "stochvol", "coda", "scoringRules",
-               "furrr", "future", "ggplot2"),
+               "furrr", "future", "ggplot2",
+               "readrba", "readabs", "fredr", "rdbnomics"),
   format = "rds"
 )
 
@@ -79,6 +83,14 @@ list(
   }),
   tar_target(fc_table, forecast_tables(final_fc, td, spec, cfg)),
   tar_target(eval_tables, evaluation_tables(allscores, dm_table, cfg)),
+  tar_target(scorecard, {
+    qstr <- function(d) paste0(format(d, "%Y"), "Q",
+                               (as.integer(format(d, "%m")) - 1) %/% 3 + 1)
+    panel <- paste0(qstr(min(td$date)), "-", qstr(max(td$date)))
+    write_model_scorecard(allscores, spec, dm_table, diag_tab, cfg,
+                          src = cfg$data$source, panel = panel,
+                          out_path = "reports/model_scorecard.md")
+  }, format = "file"),
   tar_target(weight_table, {
     dir.create("output/tables", recursive = TRUE, showWarnings = FALSE)
     write.csv(final_fc$weights, "output/tables/final_weights.csv", row.names = FALSE)

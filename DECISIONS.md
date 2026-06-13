@@ -8,13 +8,14 @@ controls it. Dated 2026-06-12 unless noted.
 
 ## D1. Variable roster and blocks
 
-**Choice.** Foreign block: world activity (`f_act`, US industrial production
-proxy), commodity prices (`f_comm`, RBA Index of Commodity Prices), foreign
-policy rate (`f_rate`, fed funds), plus an alternative trade-weighted activity
-measure (`f_act_tw`, G20 GDP) reserved for an alt-foreign variant. Domestic
-small core: GDP growth, trimmed-mean CPI inflation, unemployment rate, cash
-rate, real TWI. Medium set adds terms of trade, WPI growth, employment growth,
-consumption growth, 10-year AGS yield (13 variables total).
+**Choice.** Foreign block: world activity (`f_act`, **US real GDP** — FRED
+GDPC1; see D18), commodity prices (`f_comm`, RBA Index of Commodity Prices,
+SDR), foreign policy rate (`f_rate`, US effective fed funds — FRED FEDFUNDS),
+plus an alternative trade-weighted activity measure (`f_act_tw`, G20 GDP)
+reserved for an alt-foreign variant. Domestic small core: GDP growth,
+trimmed-mean CPI inflation, unemployment rate, cash rate, real TWI. Medium set
+adds terms of trade, WPI growth, employment growth, consumption growth,
+10-year AGS yield (13 variables total).
 
 **Why.** The small core covers the four policy targets plus the exchange rate
 (the SOE adjustment channel). The medium set follows Bańbura–Giannone–Reichlin
@@ -284,25 +285,58 @@ deliverable.
 
 ## D16. Real-data details
 
-**Choice.** RBA series via `readrba`, ABS via `readabs`, US/world via DBnomics
-(`rdbnomics`, key-free) with a FRED fallback only if `FRED_API_KEY` is set.
-Mixed-frequency series are quarterly-averaged. Failures stop with a message
-pointing at the synthetic path (always-runnable guarantee lives there, not in
-fragile retries).
+**Choice.** Australian series via `readrba`/`readabs` (key-free); the US
+foreign block via FRED (`fredr`, key required — see D18); commodity prices via
+RBA. Mixed-frequency series are quarterly-averaged with a coverage guard (a
+partial frontier quarter is set NA, not averaged from <3 months). Failures stop
+with a message pointing at the synthetic path (the always-runnable guarantee
+lives there, not in fragile retries or silent series substitution).
 
 **Caveat recorded.** Trimmed-mean CPI is published as a quarterly rate and is
-cumulated to a synthetic index purely so the uniform dlog transform
-reproduces it; the round trip is exact up to float error. The same `pre:
-pct_change` mechanism handles any source published as a % change.
+cumulated to an index purely so the uniform dlog transform reproduces it; the
+round trip is exact up to float error, and an interior gap errors loudly rather
+than NA-poisoning the cumulative product. The same `pre: pct_change` mechanism
+handles any source published as a % change. The long-history RBA commodity
+index is `GRCPAISDR` (from 1982); the bulk-spot variant `GRCPAISAD` only starts
+in 2009 and silently truncated the panel — found and fixed earlier.
 
-**Freshness caveat (updated after the real-data run).** The key-free foreign
-activity series (IMF IFS US industrial production via DBnomics) lags by about
-a year, and the balanced panel is trimmed to the stalest series — the 2026-06
-real run therefore ends 2024 Q4. Setting `FRED_API_KEY` switches `f_act` to
-FRED INDPRO and recovers the missing quarters. The long-history RBA commodity
-index is `GRCPAISDR` (from 1982); the bulk-spot variant `GRCPAISAD` only
-starts in 2009 and silently truncated the panel — found and fixed in the
-first real-data run.
+## D18. Production migration to real-first data (added 2026-06-13)
+
+**Choice.** `data.source: real` is the **default** (was synthetic); the
+foreign block is sourced from **FRED** — `f_act` = **US real GDP (GDPC1)**,
+`f_rate` = **US effective fed funds (FEDFUNDS)** — and Australian data extends
+to **2026Q1**. The FRED key lives in a gitignored `.Renviron`
+(`FRED_API_KEY`). `fred` is a first-class provider in `fetch_series`; the
+legacy DBnomics→FRED silent-fallback machinery was removed (it could swap an
+unconfigured series ID); the on-disk cache is keyed by provider+series_id so a
+changed ID re-downloads; quarterly aggregation is coverage-aware (DATA_AUDIT
+§5.8). The synthetic generator stays as an explicit opt-in for tests/CI and
+the block-exogeneity diagnostic.
+
+**Why f_act = GDPC1 rather than US IP.** For a *quarterly* macro VAR whose
+domestic block already contains Australian real GDP growth, US real GDP is the
+conceptually consistent world-activity measure (same concept, quarterly-native,
+no frequency conversion) — superior to industrial production (monthly, a
+shrinking ~15–20% slice of US output). GDPC1 is chain-volume, seasonally
+adjusted, published ~1 month after the quarter, so the panel reaches the
+current frontier rather than lagging ~a year as the old key-free IMF/IFS US-IP
+series did. The foreign activity steady-state anchor is correspondingly US real
+GDP growth (`ss_mean` 0.58/qtr ≈ 2.3% p.a., the 1997Q4–2026Q1 realized mean),
+distinct from the old IP-index growth anchor.
+
+**Why FRED for the US block.** With a (free) key, FRED is the authoritative,
+fresh, reliable US source; it removes the dependency on DBnomics (which was the
+flaky link — the FED/G17 series failed and the IMF/IFS proxy was stale).
+DBnomics remains only for the parked `alt_foreign` trade-weighted variant.
+
+**Rejected.** Keeping synthetic as the default (the institutional
+offline-runnable requirement is satisfied by retaining it as an opt-in, not as
+the default for a production forecasting suite); INDPRO as a silent fallback
+for GDPC1 (a different concept — a failure should error, not substitute);
+a non-US trade-weighted world proxy in the default suite (no fresh,
+machine-readable partner-GDP aggregate is available — the US-only proxy remains
+the documented simplification). **Config:** `data.source`, `data.end`,
+`data.fred_api_key_env`, `variables.f_act/f_rate.source`.
 
 ## D17. COVID-period estimation (added 2026-06-13 after the code/literature audit)
 

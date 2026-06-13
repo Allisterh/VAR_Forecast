@@ -2,11 +2,13 @@ default:
   master_seed: 20260612
 
   data:
-    source: synthetic          # real | synthetic
+    source: real               # real | synthetic
+    # real: live RBA/ABS/FRED pulls. synthetic: offline block-exogenous DGP,
+    # used for tests/CI and the block-exogeneity ground-truth diagnostic only.
     start: "1990-03-01"        # first quarter (1990 Q1)
-    end: "2025-12-01"          # last quarter pulled (real); synthetic uses n_quarters
+    end: "2026-03-01"          # last quarter pulled (2026 Q1); synthetic uses n_quarters
     cache_max_age_days: 30
-    fred_api_key_env: FRED_API_KEY   # FRED used only if this env var is set
+    fred_api_key_env: FRED_API_KEY   # set in .Renviron (gitignored); required for the foreign block
 
   synthetic:
     n_quarters: 144            # 36 years
@@ -25,14 +27,14 @@ default:
   # ---------------------------------------------------------------------------
   variables:
     f_act:
-      label: "World activity (US IP proxy)"
+      label: "World activity (US real GDP)"
       block: foreign
       transform: dlog
       delta: 0.0
-      ss_mean: 0.45
+      ss_mean: 0.58          # panel-era (1997Q4-2026Q1) qtr log-growth mean 0.59 (excl-COVID 0.60); ~2.3% p.a.
       ss_sd: 0.25
       sets: [small, medium]
-      source: {provider: dbnomics, id: "IMF/IFS/Q.US.AIP_IX"}
+      source: {provider: fred, id: "GDPC1"}   # US real GDP, chain volume, SA, quarterly
       target: false
     f_act_tw:
       label: "World activity (trade-weighted, OECD+Asia proxy)"
@@ -59,10 +61,10 @@ default:
       block: foreign
       transform: level
       delta: 1.0
-      ss_mean: 2.5
+      ss_mean: 2.5           # neutral fed funds; sample (1990-) mean 2.89
       ss_sd: 1.0
       sets: [small, medium, alt_foreign]
-      source: {provider: dbnomics, id: "FED/H15/RIFSPFF_N.M"}
+      source: {provider: fred, id: "FEDFUNDS"}   # effective federal funds rate, monthly
       target: false
     gdp_growth:
       label: "Real GDP growth (qtr %)"

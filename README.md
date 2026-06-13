@@ -15,36 +15,42 @@ the foreign block — is imposed in estimation and verified numerically.
 ```sh
 git clone <repo>
 cd soe-bvar-suite
+echo 'FRED_API_KEY=your_key_here' > .Renviron   # free key: https://fred.stlouisfed.org/docs/api/api_key.html
 Rscript run_all.R
 ```
 
 That restores pinned dependencies (`renv`), then runs `targets::tar_make()`.
-**No network or API keys are required**: the default configuration
-(`data.source: synthetic` in `config/config.yml`) simulates a block-exogenous
-SOE data-generating process and runs the entire pipeline — estimation,
-recursive evaluation, combination, figures, report — offline. Expect roughly
-10–20 minutes on a laptop for the default settings.
+**The default is real data** (`data.source: real` in `config/config.yml`),
+pulling live observations through the latest complete quarter:
 
-### Real Australian data
+- **Australian** data, key-free: RBA via `readrba` (cash rate, trimmed-mean
+  CPI, real TWI, 10y yield, commodity prices) and ABS via `readabs` (national
+  accounts, labour force, WPI).
+- **Foreign block** from **FRED** (free API key required, kept in a gitignored
+  `.Renviron`): US real GDP (`GDPC1`) for world activity and the effective fed
+  funds rate (`FEDFUNDS`).
 
-Set in `config/config.yml`:
+Pulls are cached under `data/raw/` (gitignored) with a manifest recording the
+provider, series ID, and last observation; the cache re-downloads automatically
+when a series ID changes. The current balanced panel runs **1997Q4–2026Q1**
+(114 quarters). A full run is ~10 min plus first-time downloads.
+
+### Offline / CI fallback
+
+For a fully offline run with no network or keys, set:
 
 ```yaml
 data:
-  source: real
+  source: synthetic
 ```
 
-Series are pulled key-free from the RBA (`readrba`), ABS (`readabs`) and
-DBnomics (`rdbnomics`), cached under `data/raw/` with a manifest. If the
-environment variable `FRED_API_KEY` is set, FRED is used as a fallback for the
-US series; without it the pipeline still runs (DBnomics first) and any
-irrecoverable download failure stops with a clear message suggesting the
-synthetic path.
+This simulates a block-exogenous SOE data-generating process (used by the test
+suite and the block-exogeneity ground-truth diagnostic). Synthetic outputs are
+clearly labelled and validate the machinery, not Australian dynamics; **no
+synthetic data ever enters a real run** — a missing real series stops the
+pipeline with an explicit error rather than substituting.
 
-Two practical notes: the key-free US activity series (IMF IFS via DBnomics)
-lags by about a year and the balanced panel is trimmed to the stalest series,
-so a key-free real run ends roughly a year behind; setting `FRED_API_KEY`
-recovers the missing quarters. A complete real-data run (June 2026, all §9
+A complete real-data run (foreign block GDPC1/FEDFUNDS, panel to 2026Q1, all §9
 diagnostics green) is archived as `reports/report_real_data.html`.
 
 ## What it produces
@@ -54,7 +60,8 @@ diagnostics green) is archived as `reports/report_real_data.html`.
 | `output/tables/` | scores by horizon (log score, CRPS, RMSE), DM tests, diagnostics, transform spec, combination weights |
 | `output/figures/` | fan charts, PIT calibration histograms, weight-evolution plots, CRPS-by-horizon plots |
 | `output/forecasts/` | combined + per-member point/interval forecast table |
-| `reports/report.html` | rendered Quarto report (methodology + results narrative) |
+| `reports/model_scorecard.md` | **one-page scorecard**: every model + its specification, and forecast performance (CRPS / log score / RMSE) by variable and horizon |
+| `reports/report.html` | rendered Quarto report (methodology + results narrative, fan charts, PIT calibration) |
 | `DECISIONS.md` | the dated log of every modelling choice and its rationale |
 
 ## The suite

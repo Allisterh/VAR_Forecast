@@ -167,12 +167,18 @@ fan_quantiles <- function(paths, probs) {
   out
 }
 
-#' Forecast sanity (section 9): finite, non-explosive, and -- for
-#' mean-reverting (delta = 0) variables only -- long-horizon reversion toward
-#' an unconditional anchor. Variables modelled as persistent levels
-#' (delta = 1: rates, log TWI/ToT) are deliberately near-unit-root, so
-#' 12-quarter reversion to the sample mean is NOT an implication of the model;
-#' they are checked for boundedness only.
+#' Forecast sanity (section 9): finite, non-explosive in the predictive
+#' tails, and non-explosive in the median. The "converged" test requires the
+#' MEDIAN path to stay within a generous band around the historical data range
+#' (range +/- 4 sd) at every horizon. This is the robust, Monte-Carlo-stable
+#' way to express "the iterated forecast settles rather than diverging": a
+#' stable VAR's median converges to its model-implied unconditional mean (which
+#' legitimately differs from the raw sample mean -- e.g. forecasting from the
+#' 2020Q2 trough, or with COVID observations downweighted), and a random walk's
+#' median is flat; both stay in band, while a diverging/explosive median leaves
+#' it. It deliberately does NOT use increment-to-increment comparisons (too
+#' sensitive to median MC noise under COVID variance inflation) nor reversion to
+#' the sample mean (the wrong target for a downweighted/extreme-origin model).
 check_forecasts <- function(paths, y, label = "member", delta = NULL) {
   ok_finite <- all(is.finite(paths))
   rng <- apply(abs(y), 2, max)
@@ -184,13 +190,11 @@ check_forecasts <- function(paths, y, label = "member", delta = NULL) {
     ql <- apply(paths[, , j, drop = FALSE], 2, quantile, probs = c(0.005, 0.995))
     if (any(abs(ql) > bound)) ok_bound <- FALSE
   }
-  H <- dim(paths)[2]
-  ybar <- colMeans(y)
-  dev4 <- abs(mean_path[min(4, H), ] - ybar)
-  devH <- abs(mean_path[H, ] - ybar)
-  # 2.5 sd: flag genuine drift (the pathologies this catches are 10-100x sd),
-  # not honest persistence of a below-mean regime
-  rev_ok <- devH <= pmax(dev4 * 1.5, 2.5 * apply(y, 2, sd))
+  sdv <- apply(y, 2, sd)
+  lo <- apply(y, 2, min) - 4 * sdv
+  hi <- apply(y, 2, max) + 4 * sdv
+  rev_ok <- vapply(seq_len(ncol(y)), function(j)
+    all(mean_path[, j] >= lo[j] & mean_path[, j] <= hi[j]), logical(1))
   if (!is.null(delta)) rev_ok <- rev_ok | (delta == 1)
   ok_converge <- all(rev_ok)
   ok <- ok_finite && ok_bound && ok_converge
