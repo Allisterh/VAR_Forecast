@@ -7,7 +7,7 @@
 # condition: optional list(variable = , path = numeric(h)) -- hard conditioning
 # by substitution (the conditioned variable is overwritten each step before it
 # feeds subsequent dynamics). An approximation to proper conditional
-# forecasting (no Waggoner-Zha shock adjustment); see DECISIONS.md.
+# forecasting (no Waggoner-Zha shock adjustment); see README.md.
 
 simulate_paths <- function(post, y, h, ndraw, condition = NULL,
                            shock_scale = NULL) {

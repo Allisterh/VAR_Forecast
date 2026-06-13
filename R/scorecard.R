@@ -17,7 +17,7 @@
   ucsv    = "Unobserved components + stochastic volatility",
   ucmean  = "Unconditional mean")
 
-# per-engine COVID-period treatment (DECISIONS.md D17)
+# per-engine COVID-period treatment (README.md D17)
 .covid_desc <- function(engine, treatment) {
   if (treatment == "none") return("none")
   if (engine == "sv") return("t-errors (SV-t)")
@@ -27,7 +27,7 @@
   "—"
 }
 
-# ---- per-model narrative profiles (DECISIONS.md is the full rationale) --------
+# ---- per-model narrative profiles (README.md is the full rationale) --------
 # Hand-authored fields; the spec line and the eval evidence are auto-generated
 # so the profiles stay accurate as the suite/data change.
 .model_profiles <- list(
@@ -275,7 +275,7 @@ write_model_scorecard <- function(scores, spec, dm, diag, cfg,
   add("## 1. The models\n")
   add("Every VAR member is **block-exogenous** (the domestic block never feeds ",
       "back into the foreign block) and produces **iterated** density forecasts. ",
-      "Members are designed to fail differently; see DECISIONS.md for the full rationale.\n")
+      "Members are designed to fail differently; see README.md for the full rationale.\n")
   add("### 1a. VAR members\n")
   add("| Model | Family | System | Lags | Shrinkage λ | Volatility | COVID |")
   add("|:--|:--|:--|:--|:--|:--|:--|")
@@ -439,7 +439,7 @@ write_model_scorecard <- function(scores, spec, dm, diag, cfg,
   add("One entry per model: its specification, what makes it distinct, the role it ",
       "plays in the suite, its strengths and failure modes, and where it actually ",
       "ranks in this evaluation (the eval line is computed, not asserted). Full ",
-      "rationale is in DECISIONS.md.\n")
+      "rationale is in README.md.\n")
   pool <- vapply(c(cfg$suite, lapply(cfg$benchmarks, function(b) list(name = b))),
                  `[[`, "", "name")   # individual models (excludes combinations)
   add("### 5a. VAR members\n")
@@ -453,7 +453,7 @@ write_model_scorecard <- function(scores, spec, dm, diag, cfg,
       add("*Strengths & failure modes:* ", p$watch, "  ")
     }
     add("*In this evaluation:* ", .member_evidence(scores, m$name, tgt, buckets, pool), "  ")
-    if (!is.null(p)) add("*See:* DECISIONS.md ", p$refs, "\n") else add("\n")
+    if (!is.null(p)) add("*See:* README.md ", p$refs, "\n") else add("\n")
   }
   add("### 5b. Benchmark members\n")
   for (b in cfg$benchmarks) {
@@ -467,7 +467,7 @@ write_model_scorecard <- function(scores, spec, dm, diag, cfg,
       add("*Strengths & failure modes:* ", p$watch, "  ")
     }
     add("*In this evaluation:* ", .member_evidence(scores, b, tgt, buckets, pool), "  ")
-    if (!is.null(p)) add("*See:* DECISIONS.md ", p$refs, "\n") else add("\n")
+    if (!is.null(p)) add("*See:* README.md ", p$refs, "\n") else add("\n")
   }
   add("### 5c. Combination schemes\n")
   for (cs in c("combo_equal", "combo_logscore", "combo_pool", "combo_bma")) {

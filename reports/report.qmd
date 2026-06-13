@@ -97,7 +97,7 @@ selection run on the same weighted data (Hartwig 2024). COVID observations
 remain in the forecast jump-off — only their likelihood contribution is
 down-weighted. A `dummy` option (≈ dropping the quarters, Schorfheide–Song
 2024) is available for comparison; its known cost is unrealistically tight
-predictive bands at pandemic-era origins. See DECISIONS.md D17.
+predictive bands at pandemic-era origins. See README.md D17.
 
 Because a handful of extreme realizations dominate mean log scores, the
 tables below are complemented by

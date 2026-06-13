@@ -19,7 +19,7 @@
 # stuck at pre-COVID widths (CCMM 2024).
 #
 # The SV engine is NOT weighted: it gets t-distributed errors instead (see
-# engines.R / DECISIONS.md D17), per CCMM (SV-t ~ SVO-t) and Hartwig (2024).
+# engines.R / README.md D17), per CCMM (SV-t ~ SVO-t) and Hartwig (2024).
 
 #' Quarter index (year*4 + quarter): all date comparisons in this module are
 #' done at quarter granularity, because the real panel stamps quarters at

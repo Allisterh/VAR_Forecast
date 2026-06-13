@@ -126,7 +126,7 @@ ffbs_local_level <- function(y, s2e, s2u, tau0 = y[1], P0 = 10 * var(y)) {
 #' inverse-gamma update. The canonical twin-SV UCSV mixes pathologically when a
 #' COVID-sized outlier sits at the sample endpoint (trend-vs-noise attribution
 #' is bimodal and the trend-vol process piles up near zero); a direct IG draw
-#' for the trend variance removes that dimension entirely. See DECISIONS.md D9.
+#' for the trend variance removes that dimension entirely. See README.md D9.
 fit_ucsv <- function(y, cfg) {
   ndraw <- cfg$mcmc$ndraw; nburn <- cfg$mcmc$nburn
   thin <- if (is.null(cfg$mcmc$bench_thin)) 1 else cfg$mcmc$bench_thin
@@ -179,7 +179,7 @@ fit_ucsv <- function(y, cfg) {
   # wrong criterion for a FORECASTING benchmark -- the predictive sum is what
   # must be Monte-Carlo-precise. Gate: MCSE of the trend endpoint must be
   # small relative to the one-step predictive sd. ESS values are still
-  # reported. DECISIONS.md D9.
+  # reported. README.md D9.
   tau_ess <- function(f) as.numeric(coda::effectiveSize(f$tauT))
   mcse_ok <- function(f) {
     pred_sd <- sqrt(var(f$tauT) + mean(exp(f$heT)) + mean(f$s2uT))

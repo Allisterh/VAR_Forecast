@@ -7,7 +7,7 @@
 
 ## 1. The models
 
-Every VAR member is **block-exogenous** (the domestic block never feeds back into the foreign block) and produces **iterated** density forecasts. Members are designed to fail differently; see DECISIONS.md for the full rationale.
+Every VAR member is **block-exogenous** (the domestic block never feeds back into the foreign block) and produces **iterated** density forecasts. Members are designed to fail differently; see README.md for the full rationale.
 
 ### 1a. VAR members
 
@@ -375,7 +375,7 @@ How often each combination **significantly beats** the random-walk and AR(4) ben
 
 ## 5. Model profiles
 
-One entry per model: its specification, what makes it distinct, the role it plays in the suite, its strengths and failure modes, and where it actually ranks in this evaluation (the eval line is computed, not asserted). Full rationale is in DECISIONS.md.
+One entry per model: its specification, what makes it distinct, the role it plays in the suite, its strengths and failure modes, and where it actually ranks in this evaluation (the eval line is computed, not asserted). Full rationale is in README.md.
 
 ### 5a. VAR members
 
@@ -385,7 +385,7 @@ One entry per model: its specification, what makes it distinct, the role it play
 *Role:* The central, representative small-SOE BVAR — the reference point the other small members are deliberate variations around (tighter, looser, steady-state, SV).  
 *Strengths & failure modes:* Solid all-rounder at short-to-medium horizons. Constant volatility means it leans on the LP scaling for 2020; without it the 2020 outliers would distort the coefficients.  
 *In this evaluation:* strongest at cash_rate (medium (5-8)), ranked 2 of 11 individual models.  
-*See:* DECISIONS.md D3, D4, D5, D17
+*See:* README.md D3, D4, D5, D17
 
 **`small_ss`**  
 *Spec:* Steady-state (Villani); 8-variable small SOE core; 4 lags; GLP marginal-likelihood shrinkage; constant volatility; LP scaling (COVID).  
@@ -393,7 +393,7 @@ One entry per model: its specification, what makes it distinct, the role it play
 *Role:* The **long-horizon anchor**. An iterated VAR reverts to its unconditional mean at h = 8-12; this member makes that mean economically grounded rather than the raw sample average.  
 *Strengths & failure modes:* Strongest at medium/far horizons for the mean-reverting targets. Vulnerable if a steady-state anchor is stale (e.g. a shifted neutral rate drags the long end); constant volatility under-disperses around 2020 absent the LP correction.  
 *In this evaluation:* best individual model for unemp_rate at medium (5-8); unemp_rate at far (9-12); cash_rate at medium (5-8).  
-*See:* DECISIONS.md D3, D4, D5, D17
+*See:* README.md D3, D4, D5, D17
 
 **`small_sv`**  
 *Spec:* Stochastic volatility, equation-by-equation; 8-variable small SOE core; 4 lags; GLP marginal-likelihood shrinkage; stochastic volatility; t-errors (SV-t) (COVID).  
@@ -401,7 +401,7 @@ One entry per model: its specification, what makes it distinct, the role it play
 *Role:* The **density-calibration specialist**: time-varying volatility tracks changing macro uncertainty and the fat tails absorb outliers instead of letting them widen the whole history.  
 *Strengths & failure modes:* Best at short horizons (h = 1-2), where getting the conditional variance right matters most. The volatility state at the jump-off can over/under-shoot if the last few quarters were unusual; the small system limits cross-variable information.  
 *In this evaluation:* best individual model for gdp_growth at near (1-4); cash_rate at near (1-4).  
-*See:* DECISIONS.md D3, D6, D17
+*See:* README.md D3, D6, D17
 
 **`small_loose_p5`**  
 *Spec:* Independent Normal-inverse-Wishart (Gibbs); 8-variable small SOE core; 5 lags; fixed shrinkage λ=0.4; constant volatility; LP scaling (COVID).  
@@ -409,7 +409,7 @@ One entry per model: its specification, what makes it distinct, the role it play
 *Role:* The **loose / long-lag** diversity axis: it fails differently from the tightly-shrunk members and can capture dynamics they shrink away.  
 *Strengths & failure modes:* Occasionally best at near-horizon density when the extra flexibility pays; noisier and prone to wider intervals at long horizons (the cost of light shrinkage in a short sample).  
 *In this evaluation:* strongest at gdp_growth (near (1-4)), ranked 2 of 11 individual models.  
-*See:* DECISIONS.md D4, D8
+*See:* README.md D4, D8
 
 **`medium_minn`**  
 *Spec:* Stochastic volatility, equation-by-equation; 13-variable medium system; 2 lags; GLP marginal-likelihood shrinkage; stochastic volatility; t-errors (SV-t) (COVID).  
@@ -417,7 +417,7 @@ One entry per model: its specification, what makes it distinct, the role it play
 *Role:* The **medium-system** axis (Banbura-Giannone-Reichlin): medium systems often forecast best given enough shrinkage, and the extra variables bring cross-sectional information the small core lacks.  
 *Strengths & failure modes:* Strong short-horizon density (it tends to win the near bucket). The short lag length limits long-horizon dynamics, and more parameters mean more estimation uncertainty at the far end.  
 *In this evaluation:* best individual model for unemp_rate at near (1-4).  
-*See:* DECISIONS.md D1, D6, D17
+*See:* README.md D1, D6, D17
 
 **`medium_conj`**  
 *Spec:* Block-recursive conjugate NIW; 13-variable medium system; 4 lags; fixed shrinkage λ=0.1; constant volatility; LP scaling (COVID); sum-of-coefficients + dummy-initial-observation priors.  
@@ -425,7 +425,7 @@ One entry per model: its specification, what makes it distinct, the role it play
 *Role:* The cheap medium workhorse; it complements `medium_minn` (conjugate constant-volatility vs SV) on the same large system.  
 *Strengths & failure modes:* Tends to lead the far-horizon GDP year-ended / cumulative-level buckets. Constant volatility leans on LP for 2020; the conjugate Kronecker prior cannot represent asymmetric shrinkage, which is why block exogeneity comes from the recursive structure.  
 *In this evaluation:* strongest at gdp_growth (far (9-12)), ranked 2 of 11 individual models.  
-*See:* DECISIONS.md D3, D5, D8
+*See:* README.md D3, D5, D8
 
 **`small_tight`**  
 *Spec:* Block-recursive conjugate NIW; 8-variable small SOE core; 4 lags; fixed shrinkage λ=0.05; constant volatility; LP scaling (COVID); sum-of-coefficients + dummy-initial-observation priors.  
@@ -433,7 +433,7 @@ One entry per model: its specification, what makes it distinct, the role it play
 *Role:* The **tight** diversity axis and the long-horizon robustness member: heavy shrinkage buys stability where lightly-parametrised models wander.  
 *Strengths & failure modes:* Best or near-best at far-horizon GDP (the tight prior stops it over-reacting). Can be too rigid at short horizons, missing genuine dynamics the looser members catch.  
 *In this evaluation:* best individual model for gdp_growth at medium (5-8); gdp_growth at far (9-12).  
-*See:* DECISIONS.md D4, D5, D8
+*See:* README.md D4, D5, D8
 
 ### 5b. Benchmark members
 
@@ -443,7 +443,7 @@ One entry per model: its specification, what makes it distinct, the role it play
 *Role:* The universal hard-to-beat short-horizon bar for persistent/level variables, and a pool member.  
 *Strengths & failure modes:* Competitive at h = 1 for level variables; fails badly at long horizons for growth variables — its level path runs away, which the cumulative-level metric (§2e) exposes brutally.  
 *In this evaluation:* best individual model for cpi_inflation at near (1-4).  
-*See:* DECISIONS.md D8
+*See:* README.md D8
 
 **`ar4`**  
 *Spec:* Bayesian AR(4); LP scaling (COVID).  
@@ -451,7 +451,7 @@ One entry per model: its specification, what makes it distinct, the role it play
 *Role:* The univariate-persistence bar — it isolates how much of the forecast is just own-history dynamics.  
 *Strengths & failure modes:* Surprisingly strong for inflation at near/medium horizons, where univariate dynamics dominate; it cannot use cross-variable information, so it lags when that matters.  
 *In this evaluation:* best individual model for cpi_inflation at medium (5-8); cash_rate at far (9-12).  
-*See:* DECISIONS.md D8
+*See:* README.md D8
 
 **`ucsv`**  
 *Spec:* Unobserved components + stochastic volatility; t-errors (robust) (COVID).  
@@ -459,7 +459,7 @@ One entry per model: its specification, what makes it distinct, the role it play
 *Role:* The canonical inflation benchmark and a genuine density anchor for the other targets.  
 *Strengths & failure modes:* Strong for inflation (its native use case); weaker for variables with richer multivariate dynamics. The trend/noise split is weakly identified, so it is gated on Monte-Carlo precision, not raw ESS.  
 *In this evaluation:* strongest at unemp_rate (medium (5-8)), ranked 3 of 11 individual models.  
-*See:* DECISIONS.md D9, D17
+*See:* README.md D9, D17
 
 **`ucmean`**  
 *Spec:* Unconditional mean; LP scaling (COVID).  
@@ -467,7 +467,7 @@ One entry per model: its specification, what makes it distinct, the role it play
 *Role:* The floor: the 'did the model beat just predicting the long-run average' bar.  
 *Strengths & failure modes:* Unexpectedly competitive at long horizons for mean-reverting growth (everything reverts to the mean eventually); useless at short horizons where dynamics matter.  
 *In this evaluation:* best individual model for cpi_inflation at far (9-12).  
-*See:* DECISIONS.md D8
+*See:* README.md D8
 
 ### 5c. Combination schemes
 
