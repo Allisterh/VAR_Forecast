@@ -71,50 +71,90 @@ degrade" situation.
 ## 3. What the *required* packages do
 
 After remediation the hard requirements are `scoringRules`, `stochvol`, `coda`
-plus the data/compute stack already present.
+plus the data/compute stack already present. The table below is the quick
+reference; the prose after it adds detail, and §3.1 spells out the
+estimation-vs-evaluation distinction for the three statistical packages.
 
-### Statistically load-bearing (not easily replaceable)
+| Package | Category | Affects the estimates/forecasts? | What it does — and what breaks without it |
+|---|---|---|---|
+| `stochvol` | estimation | **Yes** (SV members only) | Samples the time-varying volatility path for `small_sv`, `medium_minn`, `ucsv`. Without it those members can't be fit (drop them and the rest of the suite still runs). |
+| `coda` | estimation-time **diagnostic** | No | Computes MCMC effective sample size for the §9 convergence gate. Every VAR fit calls it, but it never changes a number — purely a sampler quality check. Stub-able. |
+| `scoringRules` | evaluation + combination | No (post-estimation) | Scores forecasts (`crps_sample`/`logs_sample`). Drives the scorecard, DM tests, and the data-driven pools. Without it: still get member forecasts + `combo_equal`, but no scores/DM/scorecard/weighted pools. |
+| `readrba`,`readabs`,`fredr` | data (real only) | n/a | Fetch the real RBA/ABS/FRED panel. Unused on the synthetic path. |
+| `future`,`furrr` | compute | No | Parallelise the OOS loop. Without them it runs serially (slower, same results). |
+| `yaml` | plumbing | n/a | Parses `config/config.yml`. |
+| `digest` | plumbing | Indirectly | Hashes the config (OOS cache key) and derives per-task seeds (reproducibility). |
+| `ggplot2` | output | No | All figures. |
+| `glue` | logging | No | Interpolates `{var}` in log messages (fallback path only). |
 
-- **`scoringRules`** — the forecast scoring engine. `crps_sample()` and
-  `logs_sample()` grade every density forecast against the realized value
-  (`evaluate.R`), and again for the combination pools (`combine.R`). The
-  scorecard, the Diebold–Mariano tests and the combination weights are all
-  built on these.
-- **`stochvol`** — the stochastic-volatility estimator. `specify_priors()` +
+### 3.1 The three statistical packages: what is *estimation* vs *evaluation*
+
+A common point of confusion is whether all three are "needed for estimation".
+They are not — only `stochvol` changes what is actually estimated:
+
+- **`stochvol` — genuine estimation, SV members only.** `specify_priors()` +
   the `sv_*()` prior constructors and the fast C++ sampler
-  `svsample_fast_cpp()` drive the SV members (`small_sv`, `medium_minn`) and
-  the `ucsv` benchmark (`engines.R`, `benchmarks.R`). The
+  `svsample_fast_cpp()` estimate the stochastic-volatility path for `small_sv`,
+  `medium_minn` and the `ucsv` benchmark (`engines.R`, `benchmarks.R`). The
   `sv_infinity()`/`sv_exponential()` switch is the Gaussian-vs-t-error COVID
-  treatment. (The constant-volatility engines roll their own linear algebra and
-  don't need it.)
-- **`coda`** — MCMC convergence diagnostics. `effectiveSize()` computes the
-  posterior effective sample size (`engines.R`, `benchmarks.R`); `ess_min`
-  feeds the §9 diagnostics table and `assert_diagnostics()`, which hard-stops
-  the pipeline on inadequate convergence.
+  treatment. The constant-volatility engines (conjugate, Gibbs-NIW,
+  steady-state) and `rw`/`ar4`/`ucmean` roll their own linear algebra and do
+  **not** use it. This is the only one of the three that affects the numbers.
 
-### Data acquisition (only for `data.source: real`)
+- **`coda` — estimation-*time*, but only a diagnostic.** `effectiveSize()` is
+  called inside `mcmc_diagnostics()`, which **every VAR engine runs while
+  fitting** (`engines.R` `conj_br`/`gibbs`/`ss`/`sv`, plus `ucsv`). So it sits
+  on the estimation path and the engine code errors without it — but all it does
+  is compute the posterior effective sample size for the §9 convergence gate
+  (`converged = ess_min > 50` → `assert_diagnostics()`). It does **not** touch
+  any estimate or forecast; replace it with `NA`/`Inf` and every output number
+  is identical, you just lose the convergence assertion. Mechanically required,
+  statistically inert, trivially stub-able.
+
+- **`scoringRules` — entirely post-estimation.** It appears only in
+  `evaluate.R` and `combine.R` — never in any model-fitting code. `crps_sample()`
+  / `logs_sample()` *grade* forecasts that already exist, which feeds (a) the
+  OOS scoring, DM tests and scorecard performance tables, and (b) the
+  **data-driven combination weights** (`combo_logscore`, `combo_pool`,
+  `combo_bma` derive their weights from the log scores). So: evaluation + the
+  weighted pools, not estimation.
+
+**Minimum-install intuition:** for *forecasts alone* (no scoring, no convergence
+gate, no SV members) you'd need none of the three. Add `stochvol` to restore
+the SV members, `coda` to restore the convergence gate, `scoringRules` to
+restore scoring + the scorecard + the weighted pools.
+
+### 3.2 The other required packages (already on the RBA list)
+
+**Data acquisition — only for `data.source: real`:**
 
 - **`readrba`** (`read_rba()`), **`readabs`** (`read_abs()`), **`fredr`**
   (`fredr()` / `fredr_set_key()`) — the three providers behind the real panel,
   dispatched per-series in `data_sources.R`: RBA (cash rate, commodities, TWI),
   ABS (GDP, CPI, unemployment), FRED (US foreign block). The synthetic DGP path
-  uses none of these.
+  uses none of these, so an offline `data.source: synthetic` run needs none of
+  the three.
 
-### Parallel compute
+**Parallel compute:**
 
-- **`future`** + **`furrr`** — `future::plan(multisession)` spawns workers and
-  `furrr::future_map(..., seed = TRUE)` fans the per-origin forecasts across
-  them with reproducible RNG (`evaluate.R`). Removing them would only force a
-  slow serial run.
+- **`future`** + **`furrr`** — `future::plan(multisession)` spawns the worker
+  processes and `furrr::future_map(..., seed = TRUE)` fans the per-origin
+  forecasts across them with reproducible RNG (`evaluate.R`). `furrr` is just
+  the purrr-style API on top of `future`. Dropping them would only force a slow
+  serial run; results are unchanged.
 
-### Plumbing & output
+**Plumbing & output:**
 
-- **`yaml`** — parses `config/config.yml`, the single source of truth.
-- **`digest`** — content hashing for the on-disk OOS cache key
-  (`config_hash()`) and the deterministic per-task seed (`derive_seed()`).
-- **`ggplot2`** — all figures in `report.R`.
-- **`glue`** — interpolates `{var}` log templates (only in the logging
-  fallback; degrades gracefully if absent).
+- **`yaml`** — `read_yaml()` parses `config/config.yml`, the single source of
+  truth for variables, suite, MCMC and evaluation settings (`utils.R`).
+- **`digest`** — content hashing for two jobs: `config_hash()` keys the on-disk
+  OOS cache so stale results aren't served, and `derive_seed()` turns the master
+  seed + a task string into a deterministic per-task seed (`utils.R`) — the
+  basis of run-to-run reproducibility regardless of worker scheduling.
+- **`ggplot2`** — every figure (fan charts, PIT histograms, weight-evolution,
+  CRPS-by-horizon) in `report.R`.
+- **`glue`** — interpolates `{var}` templates in log messages, used only by the
+  logging fallback in `aaa_logging.R`; degrades to the raw template if absent.
 
 ---
 
