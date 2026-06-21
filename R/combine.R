@@ -81,8 +81,11 @@ combo_weights <- function(scheme, scores, v, hs, t, members, cfg) {
     return(.shrink(w / sum(w), cfg$combination$shrink_kappa))
   }
   if (scheme == "bma") {
-    # predictive-likelihood BMA: one-step-ahead log scores, no forgetting,
-    # no shrinkage -- reported as a which-model-does-the-data-favour diagnostic
+    # predictive-likelihood BMA: shortest-horizon-in-bucket log scores, no
+    # forgetting, no shrinkage -- reported as a which-model-does-the-data-favour
+    # diagnostic only (NOT used for production forecasts). Per bucket this is the
+    # near-edge horizon (h=1 for near, 5 for medium, 9 for far), not strictly
+    # one-step.
     tr1 <- tr[tr$h == min(tr$h), ]
     ld <- vapply(split(tr1$logdens, tr1$member), sum, numeric(1))[members]
     ld[is.na(ld)] <- -Inf
@@ -137,8 +140,12 @@ combine_all <- function(scores, draws_env, td, spec, cfg) {
             ss <- sub[sub$measure == msr, ]
             ss <- ss[match(members, ss$member), ]
             if (anyNA(ss$logdens)) next
-            lw <- log(pmax(w, 1e-12))
-            ld_pool <- logsumexp(lw + ss$logdens)
+            # pooled log density over POSITIVE-weight members only: flooring zero
+            # weights at 1e-12 would let an excluded member leak mass into the
+            # pooled density (matters only for unshrunk BMA, which can be exactly
+            # zero; shrunk schemes never are). w and ss are both in `members` order.
+            pos <- w > 0
+            ld_pool <- logsumexp(log(w[pos]) + ss$logdens[pos])
             pit_pool <- sum(w * ss$pit)
             pt_pool <- sum(w * ss$point)
             # mixture CRPS via resampled draws

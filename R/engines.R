@@ -95,6 +95,9 @@ fit_conj_br <- function(y, member, spec_m, cfg, prior, weights = NULL) {
   M <- ncol(y); p <- member$lags
   blocks <- spec_m$block
   nf <- sum(blocks == "foreign"); nd <- M - nf
+  # the block-recursive split below indexes (nf+1):M / seq_len(nf); both blocks
+  # must be non-empty (a degenerate partition would mis-index in R).
+  stopifnot("conj_br needs >=1 foreign and >=1 domestic variable" = nf >= 1 && nd >= 1)
   sigma <- ar_sigmas(y, weights = weights); delta <- spec_m$delta
   n <- cfg$mcmc$forecast_draws
   w_rows <- if (is.null(weights)) NULL else weights[(p + 1):nrow(y)]
@@ -127,6 +130,8 @@ fit_conj_br <- function(y, member, spec_m, cfg, prior, weights = NULL) {
   for (i in seq_len(nd)) B0d[1 + (nf + i), i] <- delta[nf + i]  # own first lag
   omega <- numeric(Kd)
   omega[1] <- 100
+  # Minnesota lag variance with a FIXED lag-decay exponent of 1 (variance ~ 1/lag)
+  # for the conjugate scheme; the harmonic decay is not configurable here.
   omega[idx$row] <- (prior$lambda / (sigma[idx$var] * idx$lag))^2
   omega[(1 + M * p + 1):Kd] <- (1 / sigma[seq_len(nf)])^2  # contemp. foreign, loose
   nu0 <- nd + 2

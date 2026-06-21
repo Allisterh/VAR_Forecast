@@ -214,14 +214,16 @@ simulate_paths.post_ucsv <- function(post, y, h, ndraw, condition = NULL,
   for (j in seq_len(nv)) {
     f <- post$fits[[j]]
     for (d in seq_len(ndraw)) {
-      k <- ((d - 1) %% post$ndraw) + 1
+      k <- floor((d - 1) * post$ndraw / ndraw) + 1   # seed paths across the full posterior
       tau <- f$tauT[k]; he <- f$heT[k]; s2u <- f$s2uT[k]
       pe <- f$pe[k, ]
       nu <- f$pe[k, 4]
       for (s in seq_len(h)) {
         he <- pe[1] + pe[2] * (he - pe[1]) + pe[3] * rnorm(1)
         tau <- tau + sqrt(s2u) * rnorm(1)
-        eps <- if (is.finite(nu)) rt(1, df = nu) else rnorm(1)
+        # standardise the t-draw to UNIT variance (exp(he) is the calibrated
+        # transitory variance; Var[rt(nu)] = nu/(nu-2) would over-disperse it).
+        eps <- if (is.finite(nu) && nu > 2) rt(1, df = nu) * sqrt((nu - 2) / nu) else rnorm(1)
         paths[d, s, j] <- tau + exp(he / 2) * eps
       }
     }

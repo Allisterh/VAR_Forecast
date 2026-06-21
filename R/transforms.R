@@ -58,6 +58,9 @@ check_data <- function(td, spec, min_quarters = 80) {
 
 #' Year-ended transform of a quarterly dlog series: rolling 4-quarter sum.
 #' For 'level' variables the year-ended concept is the level itself.
+#' Reference definition (used by tests). The OOS scorer computes the "ye"
+#' measure inline in score_member() because it mixes realized history with
+#' forecast draws; that inline sum MUST match this 4-quarter convention.
 year_ended <- function(x, transform) {
   if (transform == "dlog") {
     n <- length(x)

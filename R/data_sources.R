@@ -168,14 +168,18 @@ to_quarterly <- function(df, min_coverage = 0.8) {
   m <- tapply(df$value, q, mean)
   n <- tapply(df$value, q, length)
   dates <- as.Date(names(m))
-  expected <- max(n)                       # fullest quarter (1 qtrly, 3 mthly, ~63 daily)
+  # MEDIAN (not max) obs-per-quarter: robust to a single anomalous quarter with
+  # extra rows (a republished/vintage print). With max, one duplicated obs would
+  # double `expected` and silently NA every genuine single-obs quarter.
+  expected <- stats::median(as.integer(n))  # typical quarter (1 qtrly, 3 mthly, ~63 daily)
   value <- as.numeric(m)
   value[as.integer(n) < min_coverage * expected] <- NA_real_
   data.frame(date = dates, value = value)
 }
 
-#' Download all series with on-disk caching; fall back per-series to FRED if a
-#' key is available. Series already published as quarterly % change (trimmed
+#' Download all series with on-disk caching. There is NO silent provider
+#' substitution: a failed fetch errors loudly (each series is pinned to its
+#' configured provider). Series already published as quarterly % change (trimmed
 #' mean CPI) are cumulated into a level index so the transform layer is uniform.
 download_real_data <- function(cfg, spec, raw_dir = "data/raw") {
   dir.create(raw_dir, recursive = TRUE, showWarnings = FALSE)
@@ -249,8 +253,12 @@ download_real_data <- function(cfg, spec, raw_dir = "data/raw") {
     q
   })
   panel <- Reduce(function(a, b) merge(a, b, by = "date", all = TRUE), qs)
-  panel <- panel[panel$date >= as.Date(cfg$data$start) &
-                 panel$date <= as.Date(cfg$data$end), ]
+  # floor the config bounds to quarter START so a mid-quarter config date (e.g.
+  # "1990-03-01" meaning 1990Q1) does not drop the quarter it names: panel dates
+  # are stamped at quarter start (cut(date, "quarter")).
+  q_start <- as.Date(cut(as.Date(cfg$data$start), "quarter"))
+  q_end   <- as.Date(cut(as.Date(cfg$data$end), "quarter"))
+  panel <- panel[panel$date >= q_start & panel$date <= q_end, ]
   manifest <- do.call(rbind, rows)
   write.csv(manifest, manifest_path, row.names = FALSE)
   log_info("real data panel: {nrow(panel)} quarters x {ncol(panel)-1} series")

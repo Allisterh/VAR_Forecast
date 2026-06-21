@@ -221,7 +221,10 @@ collect_draws <- function(oos_all, cfg) {
 #' quarters, whose extreme realizations dominate mean log scores).
 summarise_scores <- function(scores, exclude_dates = NULL) {
   if (!is.null(exclude_dates))
-    scores <- scores[!(as.Date(scores$date) %in% as.Date(exclude_dates)), ]
+    # match at QUARTER granularity: realizations are stamped at quarter start
+    # (real) or mid-quarter (synthetic), so exact-date matching silently
+    # excludes nothing (the same .qidx gotcha covid.R guards against).
+    scores <- scores[!(.qidx(scores$date) %in% .qidx(exclude_dates)), ]
   agg_one <- function(v) {
     out <- aggregate(scores[[v]],
                      by = scores[, c("member", "variable", "measure", "h")],
@@ -267,6 +270,11 @@ dm_test <- function(loss1, loss2, h = 1) {
 dm_vs_reference <- function(scores, reference) {
   combos <- unique(scores[, c("variable", "measure", "h")])
   members <- setdiff(unique(scores$member), reference)
+  # the Newey-West correction below indexes autocovariances positionally, which
+  # assumes contiguous (consecutive) forecast origins; warn if that fails.
+  ro <- sort(unique(scores$origin[scores$member == reference]))
+  if (length(ro) > 1 && any(diff(ro) != 1))
+    log_warn("dm_vs_reference: non-contiguous origins -> Newey-West lags are approximate")
   rows <- list()
   for (i in seq_len(nrow(combos))) {
     cb <- combos[i, ]
@@ -301,32 +309,55 @@ dm_vs_reference <- function(scores, reference) {
 #' the forecast. The corrupted FULL panel goes through harness_forecast --
 #' the same entry point the evaluation uses -- so the test exercises the
 #' actual slice point rather than pre-sliced data (which could never fail).
-test_no_lookahead <- function(td, spec, cfg, member = NULL) {
-  if (is.null(member)) member <- all_members(cfg)[[1]]
+#' One representative member per distinct engine (covers each engine's RNG /
+#' estimation path, which a single-member test would miss).
+.one_per_engine <- function(cfg) {
+  ms <- all_members(cfg)
+  ms[!duplicated(vapply(ms, function(m) m$engine, ""))]
+}
+
+test_no_lookahead <- function(td, spec, cfg, members = NULL) {
+  if (is.null(members)) members <- .one_per_engine(cfg)
+  else if (!is.null(members$name)) members <- list(members)  # a single member
   origins <- oos_origins(td, cfg)
-  t <- origins[1]
-  td_bad <- td
-  if (t < nrow(td))
+  # test the first origin AND, if available, an origin whose forecast horizon
+  # spans a COVID quarter (exercises the no-leak of the COVID-scale path).
+  covq <- if (!is.null(cfg$covid$quarters)) .qidx(unlist(cfg$covid$quarters)) else integer(0)
+  spans <- function(t) length(covq) > 0 &&
+    any(.qidx(td$date[(t + 1):min(t + cfg$horizons, nrow(td))]) %in% covq)
+  cov_origin <- Filter(function(t) t < nrow(td) && spans(t), origins)
+  test_origins <- unique(c(origins[1], if (length(cov_origin)) cov_origin[1]))
+  ok <- TRUE
+  for (member in members) for (t in test_origins) {
+    if (t >= nrow(td)) next
+    td_bad <- td
     td_bad[(t + 1):nrow(td), -1] <- td_bad[(t + 1):nrow(td), -1] * 1e6 + 999
-  f1 <- harness_forecast(member, td, t, spec, cfg)
-  f2 <- harness_forecast(member, td_bad, t, spec, cfg)
-  ok <- identical(f1$draws, f2$draws)
-  if (!ok) log_error("NO-LOOK-AHEAD TEST FAILED")
-  else log_info("no-look-ahead test passed (member {member$name}, origin {t})")
+    f1 <- harness_forecast(member, td, t, spec, cfg)
+    f2 <- harness_forecast(member, td_bad, t, spec, cfg)
+    if (!identical(f1$draws, f2$draws)) {
+      ok <- FALSE
+      log_error("NO-LOOK-AHEAD TEST FAILED (member {member$name}, origin {t})")
+    }
+  }
+  if (ok) log_info("no-look-ahead test passed ({length(members)} engines x {length(test_origins)} origins)")
   ok
 }
 
-#' Reproducibility: same seed twice -> identical draws.
+#' Reproducibility: same seed twice -> identical draws, for every engine.
 test_reproducibility <- function(td, spec, cfg) {
-  member <- all_members(cfg)[[1]]
   t <- oos_origins(td, cfg)[1]
-  set.seed(derive_seed(cfg$master_seed, "repro"))
-  f1 <- forecast_at_origin(member, td[seq_len(t), , drop = FALSE], spec, cfg)
-  set.seed(derive_seed(cfg$master_seed, "repro"))
-  f2 <- forecast_at_origin(member, td[seq_len(t), , drop = FALSE], spec, cfg)
-  ok <- identical(f1$draws, f2$draws)
-  if (!ok) log_error("REPRODUCIBILITY TEST FAILED")
-  else log_info("reproducibility test passed")
+  ok <- TRUE
+  for (member in .one_per_engine(cfg)) {
+    set.seed(derive_seed(cfg$master_seed, "repro"))
+    f1 <- forecast_at_origin(member, td[seq_len(t), , drop = FALSE], spec, cfg)
+    set.seed(derive_seed(cfg$master_seed, "repro"))
+    f2 <- forecast_at_origin(member, td[seq_len(t), , drop = FALSE], spec, cfg)
+    if (!identical(f1$draws, f2$draws)) {
+      ok <- FALSE
+      log_error("REPRODUCIBILITY TEST FAILED (member {member$name})")
+    }
+  }
+  if (ok) log_info("reproducibility test passed ({length(.one_per_engine(cfg))} engines)")
   ok
 }
 

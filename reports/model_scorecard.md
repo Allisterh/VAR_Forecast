@@ -50,10 +50,10 @@ These tables score the **level** of each series at t+h: the cumulative real GDP 
 
 | Variable | near (1-4) | medium (5-8) | far (9-12) |
 |:--|:--|:--|:--|
-| gdp_growth | medium_minn (0.988) | small_sv (1.693) | small_sv (2.156) |
+| gdp_growth | medium_minn (0.985) | small_sv (1.665) | small_sv (2.102) |
 | cpi_inflation | rw (0.386) | rw (1.358) | ar4 (2.693) |
-| unemp_rate | medium_minn (0.318) | small_ss (0.631) | small_ss (0.721) |
-| cash_rate | small_sv (0.307) | combo_equal (0.893) | ar4 (1.447) |
+| unemp_rate | medium_minn (0.325) | small_ss (0.631) | small_ss (0.726) |
+| cash_rate | small_sv (0.307) | combo_equal (0.894) | ar4 (1.447) |
 
 
 **Density accuracy by variable and horizon (CRPS, lower better)**
@@ -62,20 +62,20 @@ These tables score the **level** of each series at t+h: the cumulative real GDP 
 
 | Model | h=1 | h=4 | h=8 | h=12 |
 |:--|:--|:--|:--|:--|
-| small_sv | 0.611 | **1.267** | **1.954** | 2.206 |
-| medium_minn | **0.610** | 1.275 | 1.995 | 2.314 |
-| combo_equal | 0.634 | 1.305 | 2.030 | 2.237 |
-| small_tight | 0.682 | 1.366 | 2.101 | **2.165** |
-| ucsv | 0.634 | 1.304 | 2.020 | 2.424 |
+| small_sv | **0.604** | 1.269 | **1.921** | **2.154** |
+| medium_minn | 0.614 | **1.266** | 1.977 | 2.315 |
+| combo_equal | 0.631 | 1.300 | 2.042 | 2.233 |
+| small_tight | 0.682 | 1.366 | 2.101 | 2.165 |
+| ucsv | 0.629 | 1.298 | 2.026 | 2.391 |
 | medium_conj | 0.672 | 1.383 | 2.139 | 2.238 |
-| small_ss | 0.664 | 1.377 | 2.169 | 2.240 |
-| small_loose_p5 | 0.627 | 1.376 | 2.173 | 2.313 |
+| small_loose_p5 | 0.628 | 1.362 | 2.161 | 2.300 |
+| small_ss | 0.662 | 1.376 | 2.190 | 2.284 |
+| small_minn | 0.677 | 1.414 | 2.230 | 2.293 |
 | ar4 | 0.668 | 1.342 | 2.156 | 2.470 |
-| small_minn | 0.674 | 1.420 | 2.259 | 2.337 |
 | ucmean | 0.680 | 1.380 | 2.273 | 2.662 |
-| combo_pool | 0.642 | 1.425 | 2.651 | 3.685 |
-| combo_logscore | 0.754 | 1.789 | 4.352 | 3.995 |
-| combo_bma | 0.842 | 2.203 | 6.319 | 5.314 |
+| combo_pool | 0.635 | 1.432 | 2.438 | 3.699 |
+| combo_logscore | 0.760 | 1.803 | 4.328 | 3.982 |
+| combo_bma | 0.840 | 2.232 | 6.320 | 5.346 |
 | rw | 0.941 | 3.264 | 6.711 | 11.084 |
 
 **Trimmed-mean CPI inflation (qtr %) (`cpi_inflation`) — cumulative level from the origin**
@@ -84,58 +84,58 @@ These tables score the **level** of each series at t+h: the cumulative real GDP 
 |:--|:--|:--|:--|:--|
 | rw | **0.131** | **0.674** | **1.832** | 3.356 |
 | ar4 | 0.162 | 0.844 | 1.973 | **3.108** |
-| combo_equal | 0.161 | 0.770 | 1.919 | 3.340 |
-| combo_pool | 0.147 | 0.761 | 2.043 | 3.523 |
-| combo_logscore | 0.137 | 0.729 | 2.075 | 3.592 |
-| small_minn | 0.170 | 0.827 | 2.113 | 3.714 |
-| small_ss | 0.172 | 0.849 | 2.171 | 3.663 |
-| small_sv | 0.170 | 0.849 | 2.129 | 3.761 |
+| combo_equal | 0.160 | 0.770 | 1.912 | 3.323 |
+| combo_pool | 0.147 | 0.764 | 2.081 | 3.502 |
+| combo_logscore | 0.139 | 0.745 | 2.037 | 3.614 |
+| small_minn | 0.170 | 0.824 | 2.109 | 3.714 |
+| small_ss | 0.172 | 0.849 | 2.165 | 3.655 |
+| small_sv | 0.171 | 0.856 | 2.153 | 3.769 |
 | ucmean | 0.230 | 1.056 | 2.269 | 3.405 |
-| medium_minn | 0.165 | 0.814 | 2.141 | 4.002 |
-| combo_bma | 0.145 | 0.800 | 2.363 | 3.936 |
+| medium_minn | 0.165 | 0.810 | 2.153 | 4.021 |
 | small_tight | 0.198 | 0.925 | 2.241 | 3.910 |
+| combo_bma | 0.146 | 0.808 | 2.391 | 3.945 |
 | medium_conj | 0.191 | 0.895 | 2.234 | 4.029 |
-| ucsv | 0.175 | 0.920 | 2.331 | 4.056 |
-| small_loose_p5 | 0.192 | 0.935 | 2.436 | 4.117 |
+| ucsv | 0.176 | 0.926 | 2.333 | 4.058 |
+| small_loose_p5 | 0.193 | 0.944 | 2.437 | 4.089 |
 
 **Unemployment rate (%) (`unemp_rate`) — rate level at t+h**
 
 | Model | h=1 | h=4 | h=8 | h=12 |
 |:--|:--|:--|:--|:--|
-| small_ss | **0.146** | 0.500 | **0.688** | **0.747** |
-| medium_minn | 0.146 | **0.466** | 0.722 | 0.796 |
-| combo_equal | 0.159 | 0.490 | 0.699 | 0.782 |
-| small_sv | 0.154 | 0.501 | 0.758 | 0.782 |
-| small_minn | 0.152 | 0.529 | 0.753 | 0.787 |
-| small_loose_p5 | 0.155 | 0.546 | 0.780 | 0.808 |
+| small_ss | **0.148** | 0.497 | **0.690** | **0.747** |
+| combo_equal | 0.159 | 0.493 | 0.702 | 0.785 |
+| medium_minn | 0.150 | **0.477** | 0.726 | 0.803 |
+| small_sv | 0.157 | 0.501 | 0.743 | 0.771 |
+| small_minn | 0.150 | 0.524 | 0.744 | 0.789 |
+| small_loose_p5 | 0.150 | 0.540 | 0.775 | 0.812 |
 | small_tight | 0.158 | 0.549 | 0.779 | 0.811 |
-| combo_pool | 0.174 | 0.490 | 0.765 | 0.871 |
-| ucsv | 0.265 | 0.531 | 0.737 | 0.832 |
-| combo_logscore | 0.232 | 0.532 | 0.774 | 0.848 |
+| combo_pool | 0.177 | 0.496 | 0.767 | 0.860 |
+| ucsv | 0.272 | 0.536 | 0.740 | 0.841 |
 | rw | 0.169 | 0.545 | 0.777 | 0.913 |
 | medium_conj | 0.163 | 0.545 | 0.820 | 0.896 |
 | ar4 | 0.189 | 0.534 | 0.760 | 0.955 |
-| combo_bma | 0.148 | 0.475 | 0.935 | 0.886 |
+| combo_logscore | 0.383 | 0.618 | 0.776 | 0.841 |
+| combo_bma | 0.677 | 0.806 | 0.938 | 0.915 |
 | ucmean | 0.726 | 0.774 | 0.905 | 1.034 |
 
 **Cash rate (%) (`cash_rate`) — rate level at t+h**
 
 | Model | h=1 | h=4 | h=8 | h=12 |
 |:--|:--|:--|:--|:--|
-| combo_equal | 0.147 | **0.514** | **1.126** | 1.668 |
+| combo_equal | 0.148 | **0.514** | **1.120** | 1.652 |
+| small_ss | 0.140 | 0.526 | 1.149 | 1.673 |
 | ar4 | 0.167 | 0.589 | 1.141 | **1.593** |
-| small_ss | 0.139 | 0.525 | 1.151 | 1.676 |
 | rw | 0.183 | 0.590 | 1.136 | 1.670 |
-| small_minn | 0.145 | 0.527 | 1.152 | 1.785 |
-| combo_pool | 0.130 | 0.547 | 1.223 | 1.724 |
-| combo_logscore | 0.122 | 0.532 | 1.223 | 1.758 |
-| ucsv | 0.170 | 0.639 | 1.266 | 1.832 |
-| combo_bma | 0.124 | 0.576 | 1.393 | 1.850 |
+| small_minn | 0.144 | 0.528 | 1.152 | 1.792 |
+| combo_pool | 0.129 | 0.549 | 1.225 | 1.715 |
+| combo_logscore | 0.125 | 0.538 | 1.241 | 1.780 |
+| combo_bma | 0.128 | 0.576 | 1.381 | 1.854 |
+| ucsv | 0.175 | 0.646 | 1.281 | 1.842 |
 | small_tight | 0.157 | 0.598 | 1.286 | 1.935 |
+| small_loose_p5 | 0.162 | 0.593 | 1.247 | 2.038 |
 | medium_conj | 0.192 | 0.572 | 1.239 | 2.053 |
-| small_loose_p5 | 0.162 | 0.609 | 1.276 | 2.076 |
-| small_sv | 0.115 | 0.533 | 1.422 | 2.111 |
-| medium_minn | **0.113** | 0.559 | 1.462 | 2.467 |
+| small_sv | 0.113 | 0.535 | 1.410 | 2.147 |
+| medium_minn | **0.112** | 0.559 | 1.465 | 2.494 |
 | ucmean | 1.563 | 1.654 | 1.671 | 1.615 |
 
 
@@ -145,20 +145,20 @@ These tables score the **level** of each series at t+h: the cumulative real GDP 
 
 | Model | h=1 | h=4 | h=8 | h=12 |
 |:--|:--|:--|:--|:--|
-| small_sv | 1.583 | **2.554** | 3.713 | **3.739** |
-| small_tight | 1.614 | 2.623 | 3.654 | 3.830 |
-| small_ss | 1.603 | 2.599 | 3.682 | 3.845 |
-| ucsv | 1.599 | 2.556 | **3.620** | 4.045 |
-| small_minn | 1.612 | 2.636 | 3.735 | 3.938 |
+| small_sv | 1.573 | **2.524** | **3.599** | 3.938 |
+| small_tight | 1.614 | 2.623 | 3.654 | **3.830** |
+| small_ss | 1.603 | 2.587 | 3.693 | 3.878 |
+| small_minn | 1.619 | 2.633 | 3.715 | 3.910 |
+| small_loose_p5 | **1.571** | 2.585 | 3.674 | 4.071 |
 | ar4 | 1.632 | 2.632 | 3.631 | 4.036 |
-| small_loose_p5 | **1.566** | 2.608 | 3.691 | 4.079 |
+| ucsv | 1.618 | 2.587 | 3.689 | 4.106 |
 | ucmean | 1.619 | 2.634 | 3.685 | 4.152 |
 | medium_conj | 1.616 | 2.690 | 3.774 | 4.030 |
-| medium_minn | 1.578 | 2.644 | 3.803 | 4.319 |
-| combo_equal | 1.620 | 2.818 | 4.130 | 4.938 |
-| combo_pool | 1.688 | 3.361 | 6.337 | 8.822 |
-| combo_logscore | 2.054 | 5.603 | 11.629 | 8.818 |
-| combo_bma | 2.306 | 6.971 | 15.316 | 11.126 |
+| medium_minn | 1.605 | 2.625 | 3.805 | 4.323 |
+| combo_equal | 1.624 | 2.815 | 4.140 | 4.971 |
+| combo_pool | 1.688 | 3.411 | 5.770 | 8.846 |
+| combo_logscore | 2.059 | 5.597 | 11.640 | 8.842 |
+| combo_bma | 2.308 | 6.971 | 15.317 | 11.148 |
 | rw | 2.377 | 7.807 | 15.379 | 24.092 |
 
 **`cpi_inflation`**
@@ -167,58 +167,58 @@ These tables score the **level** of each series at t+h: the cumulative real GDP 
 |:--|:--|:--|:--|:--|
 | ar4 | 0.315 | 1.433 | **2.905** | **4.138** |
 | ucmean | 0.434 | 1.648 | 3.084 | 4.269 |
-| combo_equal | 0.326 | 1.501 | 3.322 | 5.216 |
-| combo_pool | 0.285 | 1.443 | 3.361 | 5.454 |
-| combo_logscore | 0.261 | 1.388 | 3.452 | 5.668 |
-| small_ss | 0.332 | 1.589 | 3.549 | 5.427 |
-| small_minn | 0.333 | 1.587 | 3.543 | 5.511 |
+| combo_equal | 0.327 | 1.500 | 3.319 | 5.208 |
+| combo_pool | 0.287 | 1.450 | 3.451 | 5.449 |
+| combo_logscore | 0.269 | 1.410 | 3.420 | 5.675 |
+| small_ss | 0.333 | 1.587 | 3.541 | 5.413 |
+| small_minn | 0.333 | 1.590 | 3.549 | 5.525 |
 | rw | **0.235** | **1.301** | 3.486 | 6.042 |
 | small_tight | 0.402 | 1.736 | 3.655 | 5.611 |
-| small_sv | 0.357 | 1.663 | 3.728 | 5.929 |
-| combo_bma | 0.277 | 1.520 | 3.860 | 6.162 |
+| small_sv | 0.360 | 1.671 | 3.716 | 5.907 |
 | medium_conj | 0.400 | 1.750 | 3.777 | 5.951 |
-| ucsv | 0.357 | 1.694 | 3.819 | 6.028 |
-| medium_minn | 0.341 | 1.599 | 3.722 | 6.257 |
-| small_loose_p5 | 0.370 | 1.732 | 3.932 | 6.210 |
+| medium_minn | 0.340 | 1.591 | 3.729 | 6.223 |
+| ucsv | 0.361 | 1.697 | 3.812 | 6.017 |
+| combo_bma | 0.278 | 1.516 | 3.914 | 6.180 |
+| small_loose_p5 | 0.371 | 1.735 | 3.926 | 6.181 |
 
 **`unemp_rate`**
 
 | Model | h=1 | h=4 | h=8 | h=12 |
 |:--|:--|:--|:--|:--|
-| small_ss | 0.337 | **0.891** | 1.205 | **1.223** |
+| small_ss | **0.339** | **0.890** | 1.208 | **1.226** |
 | ar4 | 0.413 | 0.915 | **1.174** | 1.300 |
-| combo_equal | 0.369 | 0.902 | 1.262 | 1.321 |
-| small_minn | 0.349 | 0.948 | 1.338 | 1.366 |
-| combo_pool | 0.426 | 0.919 | 1.260 | 1.400 |
+| combo_equal | 0.370 | 0.903 | 1.259 | 1.324 |
+| small_sv | 0.354 | 0.927 | 1.333 | 1.349 |
+| small_minn | 0.348 | 0.946 | 1.337 | 1.364 |
+| combo_pool | 0.428 | 0.919 | 1.260 | 1.401 |
 | small_tight | 0.362 | 0.953 | 1.351 | 1.371 |
-| small_sv | 0.346 | 0.946 | 1.395 | 1.360 |
-| medium_minn | **0.336** | 0.918 | 1.377 | 1.466 |
-| ucsv | 0.606 | 0.974 | 1.259 | 1.334 |
-| combo_bma | 0.339 | 0.940 | 1.507 | 1.416 |
-| small_loose_p5 | 0.354 | 1.005 | 1.395 | 1.470 |
+| small_loose_p5 | 0.349 | 0.989 | 1.382 | 1.467 |
+| medium_minn | 0.341 | 0.943 | 1.388 | 1.516 |
+| ucsv | 0.614 | 0.991 | 1.281 | 1.342 |
 | rw | 0.391 | 0.984 | 1.391 | 1.509 |
-| combo_logscore | 0.583 | 1.047 | 1.307 | 1.385 |
 | medium_conj | 0.375 | 1.050 | 1.487 | 1.574 |
+| combo_logscore | 0.880 | 1.126 | 1.304 | 1.390 |
 | ucmean | 1.260 | 1.326 | 1.435 | 1.542 |
+| combo_bma | 1.252 | 1.365 | 1.502 | 1.448 |
 
 **`cash_rate`**
 
 | Model | h=1 | h=4 | h=8 | h=12 |
 |:--|:--|:--|:--|:--|
-| small_ss | 0.278 | 0.990 | **1.908** | 2.579 |
+| small_ss | 0.276 | 0.990 | **1.908** | 2.581 |
 | ar4 | 0.307 | 1.103 | 1.931 | **2.467** |
-| combo_equal | 0.342 | **0.969** | 1.923 | 2.783 |
-| combo_logscore | 0.264 | 0.975 | 2.141 | 2.869 |
-| small_minn | 0.292 | 1.045 | 2.033 | 2.895 |
-| ucsv | 0.354 | 1.190 | 2.058 | 2.684 |
+| combo_equal | 0.341 | **0.971** | 1.916 | 2.777 |
+| combo_logscore | 0.272 | 0.990 | 2.133 | 2.862 |
+| small_minn | 0.292 | 1.051 | 2.045 | 2.902 |
 | rw | 0.352 | 1.194 | 2.062 | 2.684 |
-| combo_pool | 0.279 | 1.008 | 2.161 | 2.856 |
-| combo_bma | 0.282 | 1.049 | 2.397 | 2.967 |
+| combo_pool | 0.290 | 1.025 | 2.149 | 2.849 |
+| ucsv | 0.358 | 1.208 | 2.080 | 2.695 |
+| combo_bma | 0.282 | 1.054 | 2.353 | 2.961 |
 | small_tight | 0.313 | 1.190 | 2.230 | 3.078 |
-| small_sv | 0.256 | 0.978 | 2.324 | 3.425 |
-| small_loose_p5 | 0.355 | 1.130 | 2.221 | 3.433 |
+| small_sv | **0.252** | 0.982 | 2.306 | 3.468 |
+| small_loose_p5 | 0.352 | 1.113 | 2.180 | 3.387 |
 | medium_conj | 0.479 | 1.218 | 2.280 | 3.418 |
-| medium_minn | **0.248** | 1.033 | 2.525 | 4.098 |
+| medium_minn | 0.265 | 1.052 | 2.486 | 4.079 |
 | ucmean | 2.576 | 2.658 | 2.649 | 2.635 |
 
 
@@ -228,21 +228,21 @@ Averaged across the 4 targets. **−∞** marks at least one origin where the re
 
 | Model | h=1 | h=4 | h=8 | h=12 |
 |:--|:--|:--|:--|:--|
-| combo_equal | -1.852 | **-1.573** | **-2.325** | **-2.751** |
-| combo_logscore | -1.840 | -1.640 | -2.567 | -2.929 |
-| combo_pool | **-1.837** | -1.686 | -2.536 | -2.926 |
-| combo_bma | -2.056 | -1.974 | -3.147 | -3.196 |
-| medium_minn | -3.127 | -2.740 | -3.785 | -3.335 |
-| small_sv | -4.600 | -3.141 | -4.015 | -3.512 |
-| ucsv | -5.404 | -6.356 | -8.782 | -7.300 |
-| small_loose_p5 | -6.527 | -6.058 | -9.956 | -6.763 |
-| small_minn | -6.573 | -6.665 | -11.009 | -10.964 |
+| combo_equal | -1.844 | **-1.570** | **-2.328** | **-2.764** |
+| combo_pool | **-1.816** | -1.674 | -2.502 | -2.933 |
+| combo_logscore | -1.925 | -1.698 | -2.571 | -2.941 |
+| combo_bma | -3.731 | -3.547 | -3.463 | -3.201 |
+| small_sv | -4.619 | -3.748 | -4.950 | -3.554 |
+| small_loose_p5 | -6.452 | -6.500 | -10.199 | -6.380 |
 | ar4 | −∞ | -4.390 | -5.271 | -6.282 |
 | medium_conj | −∞ | -4.830 | -10.309 | -10.904 |
+| medium_minn | −∞ | -3.713 | -3.342 | -3.985 |
 | rw | −∞ | -4.619 | -4.431 | -4.180 |
-| small_ss | −∞ | -6.440 | -10.932 | -8.827 |
+| small_minn | −∞ | -5.758 | -11.007 | -10.271 |
+| small_ss | −∞ | -5.976 | -10.826 | -8.541 |
 | small_tight | −∞ | -9.674 | -15.438 | -14.541 |
 | ucmean | −∞ | -5.804 | -6.761 | -10.352 |
+| ucsv | −∞ | -6.761 | -8.879 | -7.851 |
 
 
 ## 3. Forecast performance — quarterly growth
@@ -253,10 +253,10 @@ The same scoring on each target's **single-quarter outcome** at t+h: the quarter
 
 | Variable | near (1-4) | medium (5-8) | far (9-12) |
 |:--|:--|:--|:--|
-| gdp_growth | small_sv (0.683) | small_tight (0.773) | small_tight (0.846) |
+| gdp_growth | small_sv (0.679) | small_tight (0.773) | small_tight (0.846) |
 | cpi_inflation | rw (0.189) | ar4 (0.273) | ucmean (0.302) |
-| unemp_rate | medium_minn (0.318) | small_ss (0.631) | small_ss (0.721) |
-| cash_rate | small_sv (0.307) | combo_equal (0.893) | ar4 (1.447) |
+| unemp_rate | medium_minn (0.325) | small_ss (0.631) | small_ss (0.726) |
+| cash_rate | small_sv (0.307) | combo_equal (0.894) | ar4 (1.447) |
 
 
 **Density accuracy by variable and horizon (CRPS, lower better)**
@@ -265,80 +265,80 @@ The same scoring on each target's **single-quarter outcome** at t+h: the quarter
 
 | Model | h=1 | h=4 | h=8 | h=12 |
 |:--|:--|:--|:--|:--|
-| small_loose_p5 | 0.627 | 0.741 | 0.808 | 0.883 |
-| combo_equal | 0.634 | 0.734 | 0.817 | 0.887 |
-| ar4 | 0.668 | **0.727** | 0.797 | 0.898 |
+| combo_equal | 0.631 | 0.727 | 0.810 | 0.886 |
+| small_loose_p5 | 0.628 | 0.737 | 0.810 | 0.887 |
+| small_sv | **0.604** | **0.726** | 0.840 | 0.908 |
+| ar4 | 0.668 | 0.727 | 0.797 | 0.898 |
+| small_ss | 0.662 | 0.739 | 0.806 | 0.887 |
 | small_tight | 0.682 | 0.743 | **0.794** | 0.878 |
-| small_sv | 0.611 | 0.735 | 0.850 | 0.901 |
-| small_ss | 0.664 | 0.743 | 0.804 | 0.888 |
-| small_minn | 0.674 | 0.744 | 0.802 | 0.880 |
 | medium_conj | 0.672 | 0.757 | 0.800 | **0.876** |
-| medium_minn | **0.610** | 0.743 | 0.840 | 0.925 |
+| small_minn | 0.677 | 0.745 | 0.803 | 0.883 |
+| medium_minn | 0.614 | 0.734 | 0.841 | 0.920 |
 | ucmean | 0.680 | 0.732 | 0.816 | 0.908 |
-| ucsv | 0.634 | 0.767 | 0.900 | 0.981 |
-| combo_pool | 0.642 | 0.758 | 0.931 | 1.018 |
-| combo_logscore | 0.754 | 0.860 | 1.134 | 1.042 |
-| combo_bma | 0.842 | 0.946 | 1.409 | 1.164 |
+| ucsv | 0.629 | 0.740 | 0.886 | 0.959 |
+| combo_pool | 0.635 | 0.757 | 0.902 | 1.015 |
+| combo_logscore | 0.760 | 0.855 | 1.132 | 1.043 |
+| combo_bma | 0.840 | 0.931 | 1.411 | 1.165 |
 | rw | 0.941 | 1.164 | 1.387 | 1.447 |
 
 **Trimmed-mean CPI inflation (qtr %) (`cpi_inflation`) — quarterly growth rate (%)**
 
 | Model | h=1 | h=4 | h=8 | h=12 |
 |:--|:--|:--|:--|:--|
-| ar4 | 0.162 | **0.246** | 0.288 | 0.314 |
+| ar4 | 0.162 | 0.246 | 0.288 | 0.314 |
 | ucmean | 0.230 | 0.250 | **0.286** | **0.312** |
-| combo_equal | 0.161 | 0.246 | 0.323 | 0.364 |
-| combo_pool | 0.147 | 0.257 | 0.354 | 0.391 |
-| small_ss | 0.172 | 0.269 | 0.356 | 0.371 |
+| combo_equal | 0.160 | **0.245** | 0.323 | 0.364 |
+| combo_pool | 0.147 | 0.258 | 0.361 | 0.393 |
+| small_ss | 0.172 | 0.268 | 0.354 | 0.369 |
 | rw | **0.131** | 0.248 | 0.361 | 0.431 |
-| combo_logscore | 0.137 | 0.263 | 0.365 | 0.408 |
-| small_minn | 0.170 | 0.262 | 0.356 | 0.387 |
-| small_sv | 0.170 | 0.269 | 0.356 | 0.407 |
+| small_minn | 0.170 | 0.262 | 0.355 | 0.389 |
+| combo_logscore | 0.139 | 0.266 | 0.368 | 0.409 |
+| small_sv | 0.171 | 0.270 | 0.359 | 0.406 |
 | small_tight | 0.198 | 0.272 | 0.350 | 0.395 |
-| medium_minn | 0.165 | 0.264 | 0.364 | 0.444 |
+| medium_minn | 0.165 | 0.265 | 0.372 | 0.445 |
 | medium_conj | 0.191 | 0.272 | 0.367 | 0.426 |
-| combo_bma | 0.145 | 0.288 | 0.401 | 0.439 |
-| ucsv | 0.175 | 0.283 | 0.387 | 0.430 |
-| small_loose_p5 | 0.192 | 0.295 | 0.415 | 0.422 |
+| ucsv | 0.176 | 0.285 | 0.386 | 0.430 |
+| combo_bma | 0.146 | 0.291 | 0.407 | 0.437 |
+| small_loose_p5 | 0.193 | 0.296 | 0.414 | 0.420 |
 
 **Unemployment rate (%) (`unemp_rate`) — rate level at t+h (as §2)**
 
 | Model | h=1 | h=4 | h=8 | h=12 |
 |:--|:--|:--|:--|:--|
-| small_ss | **0.146** | 0.500 | **0.688** | **0.747** |
-| medium_minn | 0.146 | **0.466** | 0.722 | 0.796 |
-| combo_equal | 0.159 | 0.490 | 0.699 | 0.782 |
-| small_sv | 0.154 | 0.501 | 0.758 | 0.782 |
-| small_minn | 0.152 | 0.529 | 0.753 | 0.787 |
-| small_loose_p5 | 0.155 | 0.546 | 0.780 | 0.808 |
+| small_ss | **0.148** | 0.497 | **0.690** | **0.747** |
+| combo_equal | 0.159 | 0.493 | 0.702 | 0.785 |
+| medium_minn | 0.150 | **0.477** | 0.726 | 0.803 |
+| small_sv | 0.157 | 0.501 | 0.743 | 0.771 |
+| small_minn | 0.150 | 0.524 | 0.744 | 0.789 |
+| small_loose_p5 | 0.150 | 0.540 | 0.775 | 0.812 |
 | small_tight | 0.158 | 0.549 | 0.779 | 0.811 |
-| combo_pool | 0.174 | 0.490 | 0.765 | 0.871 |
-| ucsv | 0.265 | 0.531 | 0.737 | 0.832 |
-| combo_logscore | 0.232 | 0.532 | 0.774 | 0.848 |
+| combo_pool | 0.177 | 0.496 | 0.767 | 0.860 |
+| ucsv | 0.272 | 0.536 | 0.740 | 0.841 |
 | rw | 0.169 | 0.545 | 0.777 | 0.913 |
 | medium_conj | 0.163 | 0.545 | 0.820 | 0.896 |
 | ar4 | 0.189 | 0.534 | 0.760 | 0.955 |
-| combo_bma | 0.148 | 0.475 | 0.935 | 0.886 |
+| combo_logscore | 0.383 | 0.618 | 0.776 | 0.841 |
+| combo_bma | 0.677 | 0.806 | 0.938 | 0.915 |
 | ucmean | 0.726 | 0.774 | 0.905 | 1.034 |
 
 **Cash rate (%) (`cash_rate`) — rate level at t+h (as §2)**
 
 | Model | h=1 | h=4 | h=8 | h=12 |
 |:--|:--|:--|:--|:--|
-| combo_equal | 0.147 | **0.514** | **1.126** | 1.668 |
+| combo_equal | 0.148 | **0.514** | **1.120** | 1.652 |
+| small_ss | 0.140 | 0.526 | 1.149 | 1.673 |
 | ar4 | 0.167 | 0.589 | 1.141 | **1.593** |
-| small_ss | 0.139 | 0.525 | 1.151 | 1.676 |
 | rw | 0.183 | 0.590 | 1.136 | 1.670 |
-| small_minn | 0.145 | 0.527 | 1.152 | 1.785 |
-| combo_pool | 0.130 | 0.547 | 1.223 | 1.724 |
-| combo_logscore | 0.122 | 0.532 | 1.223 | 1.758 |
-| ucsv | 0.170 | 0.639 | 1.266 | 1.832 |
-| combo_bma | 0.124 | 0.576 | 1.393 | 1.850 |
+| small_minn | 0.144 | 0.528 | 1.152 | 1.792 |
+| combo_pool | 0.129 | 0.549 | 1.225 | 1.715 |
+| combo_logscore | 0.125 | 0.538 | 1.241 | 1.780 |
+| combo_bma | 0.128 | 0.576 | 1.381 | 1.854 |
+| ucsv | 0.175 | 0.646 | 1.281 | 1.842 |
 | small_tight | 0.157 | 0.598 | 1.286 | 1.935 |
+| small_loose_p5 | 0.162 | 0.593 | 1.247 | 2.038 |
 | medium_conj | 0.192 | 0.572 | 1.239 | 2.053 |
-| small_loose_p5 | 0.162 | 0.609 | 1.276 | 2.076 |
-| small_sv | 0.115 | 0.533 | 1.422 | 2.111 |
-| medium_minn | **0.113** | 0.559 | 1.462 | 2.467 |
+| small_sv | 0.113 | 0.535 | 1.410 | 2.147 |
+| medium_minn | **0.112** | 0.559 | 1.465 | 2.494 |
 | ucmean | 1.563 | 1.654 | 1.671 | 1.615 |
 
 
@@ -348,20 +348,20 @@ The same scoring on each target's **single-quarter outcome** at t+h: the quarter
 
 | Model | h=1 | h=4 | h=8 | h=12 |
 |:--|:--|:--|:--|:--|
-| small_sv | 1.583 | 1.700 | 1.812 | **1.893** |
+| small_sv | 1.573 | **1.664** | 1.806 | 1.912 |
+| small_loose_p5 | **1.571** | 1.698 | 1.795 | 1.925 |
 | small_tight | 1.614 | 1.687 | 1.784 | 1.907 |
-| small_loose_p5 | **1.566** | 1.702 | 1.799 | 1.925 |
-| small_minn | 1.612 | 1.683 | 1.793 | 1.915 |
-| small_ss | 1.603 | 1.684 | 1.797 | 1.922 |
-| medium_conj | 1.616 | 1.704 | 1.794 | 1.904 |
-| medium_minn | 1.578 | 1.701 | 1.810 | 1.930 |
-| ar4 | 1.632 | **1.674** | **1.784** | 1.934 |
-| ucsv | 1.599 | 1.693 | 1.812 | 1.922 |
+| small_ss | 1.603 | 1.681 | 1.799 | 1.919 |
+| ucsv | 1.618 | 1.675 | 1.812 | 1.909 |
+| small_minn | 1.619 | 1.685 | 1.793 | 1.918 |
+| medium_conj | 1.616 | 1.704 | 1.794 | **1.904** |
+| ar4 | 1.632 | 1.674 | **1.784** | 1.934 |
 | ucmean | 1.619 | 1.684 | 1.801 | 1.929 |
-| combo_equal | 1.620 | 1.689 | 1.814 | 1.922 |
-| combo_pool | 1.688 | 1.724 | 1.921 | 2.012 |
-| combo_logscore | 2.054 | 1.970 | 2.254 | 2.011 |
-| combo_bma | 2.306 | 2.182 | 2.570 | 2.084 |
+| combo_equal | 1.624 | 1.681 | 1.816 | 1.921 |
+| medium_minn | 1.605 | 1.676 | 1.819 | 1.946 |
+| combo_pool | 1.688 | 1.721 | 1.895 | 2.011 |
+| combo_logscore | 2.059 | 1.956 | 2.257 | 2.011 |
+| combo_bma | 2.308 | 2.159 | 2.570 | 2.085 |
 | rw | 2.377 | 2.326 | 2.609 | 2.661 |
 
 **`cpi_inflation`**
@@ -370,58 +370,58 @@ The same scoring on each target's **single-quarter outcome** at t+h: the quarter
 |:--|:--|:--|:--|:--|
 | ar4 | 0.315 | **0.441** | **0.478** | **0.504** |
 | ucmean | 0.434 | 0.449 | 0.480 | 0.507 |
-| combo_equal | 0.326 | 0.471 | 0.581 | 0.603 |
-| combo_pool | 0.285 | 0.482 | 0.602 | 0.628 |
-| small_ss | 0.332 | 0.502 | 0.594 | 0.588 |
-| combo_logscore | 0.261 | 0.487 | 0.625 | 0.654 |
-| small_minn | 0.333 | 0.498 | 0.595 | 0.608 |
+| combo_equal | 0.327 | 0.471 | 0.581 | 0.603 |
+| combo_pool | 0.287 | 0.482 | 0.614 | 0.628 |
+| small_ss | 0.333 | 0.500 | 0.593 | 0.586 |
+| small_minn | 0.333 | 0.498 | 0.594 | 0.610 |
+| combo_logscore | 0.269 | 0.490 | 0.625 | 0.654 |
 | small_tight | 0.402 | 0.508 | 0.586 | 0.612 |
 | rw | **0.235** | 0.481 | 0.666 | 0.726 |
-| small_sv | 0.357 | 0.516 | 0.632 | 0.651 |
-| combo_bma | 0.277 | 0.526 | 0.675 | 0.686 |
-| ucsv | 0.357 | 0.513 | 0.646 | 0.666 |
+| small_sv | 0.360 | 0.514 | 0.632 | 0.654 |
+| combo_bma | 0.278 | 0.527 | 0.687 | 0.684 |
+| ucsv | 0.361 | 0.516 | 0.642 | 0.663 |
 | medium_conj | 0.400 | 0.518 | 0.623 | 0.655 |
-| medium_minn | 0.341 | 0.503 | 0.658 | 0.733 |
-| small_loose_p5 | 0.370 | 0.542 | 0.687 | 0.668 |
+| medium_minn | 0.340 | 0.504 | 0.661 | 0.725 |
+| small_loose_p5 | 0.371 | 0.543 | 0.684 | 0.667 |
 
 **`unemp_rate`**
 
 | Model | h=1 | h=4 | h=8 | h=12 |
 |:--|:--|:--|:--|:--|
-| small_ss | 0.337 | **0.891** | 1.205 | **1.223** |
+| small_ss | **0.339** | **0.890** | 1.208 | **1.226** |
 | ar4 | 0.413 | 0.915 | **1.174** | 1.300 |
-| combo_equal | 0.369 | 0.902 | 1.262 | 1.321 |
-| small_minn | 0.349 | 0.948 | 1.338 | 1.366 |
-| combo_pool | 0.426 | 0.919 | 1.260 | 1.400 |
+| combo_equal | 0.370 | 0.903 | 1.259 | 1.324 |
+| small_sv | 0.354 | 0.927 | 1.333 | 1.349 |
+| small_minn | 0.348 | 0.946 | 1.337 | 1.364 |
+| combo_pool | 0.428 | 0.919 | 1.260 | 1.401 |
 | small_tight | 0.362 | 0.953 | 1.351 | 1.371 |
-| small_sv | 0.346 | 0.946 | 1.395 | 1.360 |
-| medium_minn | **0.336** | 0.918 | 1.377 | 1.466 |
-| ucsv | 0.606 | 0.974 | 1.259 | 1.334 |
-| combo_bma | 0.339 | 0.940 | 1.507 | 1.416 |
-| small_loose_p5 | 0.354 | 1.005 | 1.395 | 1.470 |
+| small_loose_p5 | 0.349 | 0.989 | 1.382 | 1.467 |
+| medium_minn | 0.341 | 0.943 | 1.388 | 1.516 |
+| ucsv | 0.614 | 0.991 | 1.281 | 1.342 |
 | rw | 0.391 | 0.984 | 1.391 | 1.509 |
-| combo_logscore | 0.583 | 1.047 | 1.307 | 1.385 |
 | medium_conj | 0.375 | 1.050 | 1.487 | 1.574 |
+| combo_logscore | 0.880 | 1.126 | 1.304 | 1.390 |
 | ucmean | 1.260 | 1.326 | 1.435 | 1.542 |
+| combo_bma | 1.252 | 1.365 | 1.502 | 1.448 |
 
 **`cash_rate`**
 
 | Model | h=1 | h=4 | h=8 | h=12 |
 |:--|:--|:--|:--|:--|
-| small_ss | 0.278 | 0.990 | **1.908** | 2.579 |
+| small_ss | 0.276 | 0.990 | **1.908** | 2.581 |
 | ar4 | 0.307 | 1.103 | 1.931 | **2.467** |
-| combo_equal | 0.342 | **0.969** | 1.923 | 2.783 |
-| combo_logscore | 0.264 | 0.975 | 2.141 | 2.869 |
-| small_minn | 0.292 | 1.045 | 2.033 | 2.895 |
-| ucsv | 0.354 | 1.190 | 2.058 | 2.684 |
+| combo_equal | 0.341 | **0.971** | 1.916 | 2.777 |
+| combo_logscore | 0.272 | 0.990 | 2.133 | 2.862 |
+| small_minn | 0.292 | 1.051 | 2.045 | 2.902 |
 | rw | 0.352 | 1.194 | 2.062 | 2.684 |
-| combo_pool | 0.279 | 1.008 | 2.161 | 2.856 |
-| combo_bma | 0.282 | 1.049 | 2.397 | 2.967 |
+| combo_pool | 0.290 | 1.025 | 2.149 | 2.849 |
+| ucsv | 0.358 | 1.208 | 2.080 | 2.695 |
+| combo_bma | 0.282 | 1.054 | 2.353 | 2.961 |
 | small_tight | 0.313 | 1.190 | 2.230 | 3.078 |
-| small_sv | 0.256 | 0.978 | 2.324 | 3.425 |
-| small_loose_p5 | 0.355 | 1.130 | 2.221 | 3.433 |
+| small_sv | **0.252** | 0.982 | 2.306 | 3.468 |
+| small_loose_p5 | 0.352 | 1.113 | 2.180 | 3.387 |
 | medium_conj | 0.479 | 1.218 | 2.280 | 3.418 |
-| medium_minn | **0.248** | 1.033 | 2.525 | 4.098 |
+| medium_minn | 0.265 | 1.052 | 2.486 | 4.079 |
 | ucmean | 2.576 | 2.658 | 2.649 | 2.635 |
 
 
@@ -431,21 +431,21 @@ Averaged across the 4 targets. **−∞** marks at least one origin where the re
 
 | Model | h=1 | h=4 | h=8 | h=12 |
 |:--|:--|:--|:--|:--|
-| combo_equal | -1.852 | **-1.524** | **-1.757** | **-1.872** |
-| combo_pool | **-1.837** | -1.670 | -1.954 | -2.028 |
-| combo_logscore | -1.840 | -1.649 | -2.013 | -2.042 |
-| combo_bma | -2.056 | -1.986 | -2.379 | -2.192 |
-| medium_minn | -3.127 | -4.551 | -7.785 | -3.681 |
-| small_sv | -4.600 | -6.722 | -6.114 | -3.030 |
-| ucsv | -5.404 | -6.487 | -10.739 | -9.902 |
-| small_loose_p5 | -6.527 | -9.128 | -9.524 | -8.624 |
+| combo_equal | -1.844 | **-1.514** | **-1.712** | **-1.878** |
+| combo_pool | **-1.816** | -1.654 | -1.920 | -2.039 |
+| combo_logscore | -1.925 | -1.690 | -1.982 | -2.056 |
+| combo_bma | -3.731 | -2.403 | -2.354 | -2.211 |
+| small_loose_p5 | -6.452 | -9.541 | -9.016 | -10.606 |
 | ar4 | −∞ | -7.791 | -10.428 | −∞ |
 | medium_conj | −∞ | −∞ | −∞ | -13.455 |
+| medium_minn | −∞ | −∞ | -2.210 | -5.106 |
 | rw | −∞ | -2.978 | -2.956 | -2.692 |
-| small_minn | -6.573 | −∞ | −∞ | −∞ |
-| small_ss | −∞ | −∞ | −∞ | -12.302 |
+| small_minn | −∞ | −∞ | −∞ | −∞ |
+| small_ss | −∞ | -10.085 | -12.188 | -10.290 |
+| small_sv | -4.619 | −∞ | -7.262 | -3.452 |
 | small_tight | −∞ | -10.973 | −∞ | -12.616 |
 | ucmean | −∞ | −∞ | −∞ | −∞ |
+| ucsv | −∞ | −∞ | −∞ | -13.565 |
 
 
 ## 4. Do the combinations beat the best single model?
@@ -457,20 +457,20 @@ Mean CRPS over all 4 targets, by horizon bucket. The honest test of a pool is wh
 
 | Model | near (1-4) | medium (5-8) | far (9-12) |
 |:--|:--|:--|:--|
-| combo_equal | 0.533 | **1.189** | **1.812** |
+| combo_equal | 0.534 | **1.189** | **1.808** |
 | ar4 | 0.578 | 1.259 | 1.849 |
-| small_ss | 0.554 | 1.275 | 1.903 |
-| small_sv | 0.534 | 1.267 | 1.992 |
-| small_minn | 0.564 | 1.294 | 1.957 |
-| medium_minn | **0.525** | 1.264 | 2.094 |
+| small_ss | 0.554 | 1.276 | 1.910 |
+| small_sv | 0.534 | 1.259 | 1.982 |
+| small_minn | 0.562 | 1.286 | 1.946 |
+| medium_minn | **0.525** | 1.266 | 2.100 |
 | small_tight | 0.590 | 1.327 | 1.994 |
-| ucsv | 0.590 | 1.304 | 2.033 |
+| ucsv | 0.594 | 1.312 | 2.036 |
 | medium_conj | 0.588 | 1.323 | 2.052 |
-| small_loose_p5 | 0.583 | 1.364 | 2.098 |
-| combo_pool | 0.547 | 1.359 | 2.188 |
-| combo_logscore | 0.610 | 1.687 | 2.252 |
+| small_loose_p5 | 0.580 | 1.356 | 2.082 |
+| combo_pool | 0.549 | 1.333 | 2.184 |
+| combo_logscore | 0.646 | 1.680 | 2.257 |
 | ucmean | 1.027 | 1.576 | 2.042 |
-| combo_bma | 0.667 | 2.191 | 2.637 |
+| combo_bma | 0.780 | 2.199 | 2.662 |
 | rw | 0.812 | 2.063 | 3.629 |
 
 **4b. Quarterly growth**
@@ -480,17 +480,17 @@ Mean CRPS over all 4 targets, by horizon bucket. The honest test of a pool is wh
 | combo_equal | 0.389 | **0.650** | **0.860** |
 | small_ss | 0.396 | 0.665 | 0.862 |
 | ar4 | 0.414 | 0.668 | 0.870 |
-| small_minn | 0.401 | 0.678 | 0.894 |
-| combo_pool | 0.397 | 0.716 | 0.933 |
+| small_minn | 0.401 | 0.676 | 0.894 |
+| combo_pool | 0.398 | 0.714 | 0.932 |
 | small_tight | 0.421 | 0.707 | 0.936 |
-| small_sv | 0.388 | 0.721 | 0.988 |
+| small_loose_p5 | 0.415 | 0.716 | 0.959 |
+| small_sv | 0.388 | 0.715 | 0.988 |
 | medium_conj | 0.423 | 0.706 | 0.968 |
-| ucsv | 0.438 | 0.725 | 0.946 |
-| small_loose_p5 | 0.419 | 0.724 | 0.967 |
-| combo_logscore | 0.428 | 0.765 | 0.944 |
-| medium_minn | **0.386** | 0.718 | 1.042 |
+| ucsv | 0.439 | 0.728 | 0.950 |
+| medium_minn | **0.386** | 0.721 | 1.046 |
+| combo_logscore | 0.461 | 0.768 | 0.945 |
 | rw | 0.510 | 0.802 | 1.042 |
-| combo_bma | 0.444 | 0.904 | 1.014 |
+| combo_bma | 0.553 | 0.908 | 1.021 |
 | ucmean | 0.831 | 0.896 | 0.950 |
 
 ## 5. Statistical significance (Diebold-Mariano)
@@ -509,10 +509,10 @@ How often each combination **significantly beats** the random-walk and AR(4) ben
 
 Strongest results (significant at 5% or better):
 
-- `combo_equal` beats `ar4` on **unemp_rate** at h=12 (DM -3.37***)
-- `combo_equal` beats `ar4` on **cash_rate** at h=4 (DM -2.18**)
-- `combo_logscore` beats `ar4` on **unemp_rate** at h=12 (DM -2.10**)
-- `combo_logscore` beats `rw` on **gdp_growth** at h=4 (DM -2.05**)
+- `combo_equal` beats `ar4` on **unemp_rate** at h=12 (DM -3.66***)
+- `combo_equal` beats `ar4` on **cash_rate** at h=4 (DM -2.22**)
+- `combo_bma` beats `rw` on **gdp_growth** at h=4 (DM -2.19**)
+- `combo_logscore` beats `ar4` on **unemp_rate** at h=12 (DM -2.14**)
 
 **5b. Quarterly growth**
 
@@ -525,9 +525,10 @@ Strongest results (significant at 5% or better):
 
 Strongest results (significant at 5% or better):
 
-- `combo_equal` beats `ar4` on **unemp_rate** at h=12 (DM -3.37***)
-- `combo_equal` beats `ar4` on **cash_rate** at h=4 (DM -2.18**)
-- `combo_logscore` beats `ar4` on **unemp_rate** at h=12 (DM -2.10**)
+- `combo_equal` beats `ar4` on **unemp_rate** at h=12 (DM -3.66***)
+- `combo_equal` beats `ar4` on **cash_rate** at h=4 (DM -2.22**)
+- `combo_logscore` beats `ar4` on **unemp_rate** at h=12 (DM -2.14**)
+- `combo_logscore` beats `rw` on **gdp_growth** at h=4 (DM -2.04**)
 
 ## 6. Model profiles
 
@@ -568,7 +569,7 @@ One entry per model: its specification, what makes it distinct, the role it play
 *Role:* The **loose / long-lag** diversity axis: it fails differently from the tightly-shrunk members and can capture dynamics they shrink away.  
 *Strengths & failure modes:* Occasionally best at near-horizon density when the extra flexibility pays; noisier and prone to wider intervals at long horizons (the cost of light shrinkage in a short sample).  
 *In this evaluation — levels:* strongest at gdp_growth (near (1-4)), ranked 4 of 11 individual models.  
-*In this evaluation — quarterly growth:* strongest at gdp_growth (near (1-4)), ranked 2 of 11 individual models.  
+*In this evaluation — quarterly growth:* strongest at gdp_growth (near (1-4)), ranked 3 of 11 individual models.  
 *See:* README.md D4, D8
 
 **`medium_minn`**  
@@ -624,7 +625,7 @@ One entry per model: its specification, what makes it distinct, the role it play
 *Role:* The canonical inflation benchmark and a genuine density anchor for the other targets.  
 *Strengths & failure modes:* Strong for inflation (its native use case); weaker for variables with richer multivariate dynamics. The trend/noise split is weakly identified, so it is gated on Monte-Carlo precision, not raw ESS.  
 *In this evaluation — levels:* strongest at gdp_growth (near (1-4)), ranked 3 of 11 individual models.  
-*In this evaluation — quarterly growth:* strongest at unemp_rate (medium (5-8)), ranked 3 of 11 individual models.  
+*In this evaluation — quarterly growth:* strongest at gdp_growth (near (1-4)), ranked 4 of 11 individual models.  
 *See:* README.md D9, D17
 
 **`ucmean`**  

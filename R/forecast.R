@@ -49,7 +49,7 @@ simulate_paths.post_gibbs <- function(post, y, h, ndraw, condition = NULL,
   paths <- array(NA_real_, c(ndraw, h, M))
   st0 <- .ystate(y, p)
   for (d in seq_len(ndraw)) {
-    k <- ((d - 1) %% post$ndraw) + 1
+    k <- floor((d - 1) * post$ndraw / ndraw) + 1   # seed paths across the full posterior
     B <- post$B[k, , ]
     cS <- chol(post$Sigma[k, , ])
     paths[d, , ] <- .iterate_path(B, cS, st0, h, M, p, condition, post$varnames,
@@ -66,7 +66,7 @@ simulate_paths.post_ss <- function(post, y, h, ndraw, condition = NULL,
   M <- post$M; p <- post$p
   paths <- array(NA_real_, c(ndraw, h, M))
   for (d in seq_len(ndraw)) {
-    k <- ((d - 1) %% post$ndraw) + 1
+    k <- floor((d - 1) * post$ndraw / ndraw) + 1   # seed paths across the full posterior
     A <- post$A[k, , ]; Psi <- post$Psi[k, ]
     cS <- chol(post$Sigma[k, , ])
     z <- sweep(y, 2, Psi)
@@ -97,7 +97,7 @@ simulate_paths.post_conj_br <- function(post, y, h, ndraw, condition = NULL,
   paths <- array(NA_real_, c(ndraw, h, M))
   st0 <- .ystate(y, p)                       # all vars, most recent first
   for (d in seq_len(ndraw)) {
-    k <- ((d - 1) %% post$ndraw) + 1
+    k <- floor((d - 1) * post$ndraw / ndraw) + 1   # seed paths across the full posterior
     Bf <- post$foreign$B[k, , ];  cSf <- chol(post$foreign$Sigma[k, , ])
     Bd <- post$domestic$B[k, , ]; cSd <- chol(post$domestic$Sigma[k, , ])
     st <- st0
@@ -125,7 +125,7 @@ simulate_paths.post_sv <- function(post, y, h, ndraw, condition = NULL,
   paths <- array(NA_real_, c(ndraw, h, M))
   st0 <- .ystate(y, p)
   for (d in seq_len(ndraw)) {
-    k <- ((d - 1) %% post$ndraw) + 1
+    k <- floor((d - 1) * post$ndraw / ndraw) + 1   # seed paths across the full posterior
     st <- st0
     # pull per-equation parameters for this draw
     betas <- lapply(post$eqs, function(e) e$beta[k, ])
@@ -143,7 +143,11 @@ simulate_paths.post_sv <- function(post, y, h, ndraw, condition = NULL,
         hs[i] <- svp[[i]]["mu"] + svp[[i]]["phi"] * (hs[i] - svp[[i]]["mu"]) +
                  svp[[i]]["sigma"] * rnorm(1)
         nu_i <- svp[[i]]["nu"]
-        eps <- if (!is.na(nu_i) && is.finite(nu_i)) rt(1, df = nu_i) else rnorm(1)
+        # standardise the t-draw to UNIT variance: estimation calibrates exp(h)
+        # to be the conditional variance, but Var[rt(nu)] = nu/(nu-2) > 1, so a
+        # raw rt() would over-disperse every SV predictive density.
+        eps <- if (!is.na(nu_i) && is.finite(nu_i) && nu_i > 2)
+          rt(1, df = nu_i) * sqrt((nu_i - 2) / nu_i) else rnorm(1)
         ynew[i] <- sum(xx * betas[[i]]) + exp(hs[i] / 2) * eps
       }
       ynew <- .apply_condition(ynew, s, condition, post$varnames)
