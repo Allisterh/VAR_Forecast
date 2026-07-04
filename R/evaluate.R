@@ -37,7 +37,10 @@ all_members <- function(cfg) {
 
 #' Fit + forecast a single member at one origin using ONLY data up to t.
 #' Returns thinned predictive draws [store_draws, h, n_targets] plus sanity info.
-forecast_at_origin <- function(member, td_t, spec, cfg) {
+#' condition: optional conditioning spec passed through to simulate_paths
+#' (list(variable=, path=, method=); README.md D21) -- used for scenario
+#' forecasts at the final origin, never inside the OOS evaluation.
+forecast_at_origin <- function(member, td_t, spec, cfg, condition = NULL) {
   H <- cfg$horizons
   tgt <- spec$variable[spec$target]
   nfd <- cfg$mcmc$forecast_draws
@@ -66,7 +69,8 @@ forecast_at_origin <- function(member, td_t, spec, cfg) {
     } else glp_lambda <- 0.2
     post <- fit_var_member(y, member, spec_m, cfg, glp_lambda = glp_lambda,
                            weights = use_w)
-    paths <- simulate_paths(post, y, H, nfd, shock_scale = s_fut)
+    paths <- simulate_paths(post, y, H, nfd, condition = condition,
+                            shock_scale = s_fut)
     keep <- intersect(tgt, dimnames(paths)[[3]])
     paths <- paths[, , keep, drop = FALSE]
     covid_info <- list(scales = cov$scales, rho = cov$rho)
@@ -77,8 +81,10 @@ forecast_at_origin <- function(member, td_t, spec, cfg) {
     y <- as.matrix(td_t[, tgt])
     cov <- covid_treatment(y, td_t$date, 4, ar_sigmas(y),
                            spec$delta[match(tgt, spec$variable)], cfg, H)
-    post <- fit_benchmark(y, member$engine, cfgb, weights = cov$weights)
-    paths <- simulate_paths(post, y, H, nfd, shock_scale = cov$s_future)
+    post <- fit_benchmark(y, member$engine, cfgb, weights = cov$weights,
+                          delta = spec$delta[match(tgt, spec$variable)])
+    paths <- simulate_paths(post, y, H, nfd, condition = condition,
+                            shock_scale = cov$s_future)
     glp_lambda <- NA_real_
     covid_info <- list(scales = cov$scales, rho = cov$rho)
   }
@@ -372,4 +378,42 @@ check_calibration <- function(scores, alpha = 0.01) {
     out[[m]] <- chi$p.value
   }
   out
+}
+
+#' PIT moment tests at every horizon (Knuppel 2015 style). Multi-step PITs are
+#' serially correlated by construction (overlapping forecast windows), so the
+#' h=1 chi-square test above is wrong for h>1; instead test the first two
+#' moments of the PIT with a Newey-West (lag h-1) variance:
+#'   location:   E[pit] = 1/2   (bias: forecasts systematically too high/low)
+#'   dispersion: E[(pit-1/2)^2] = 1/12  (intervals too wide / too narrow)
+#' Returns a long data.frame (member, variable, h, n, mean_pit, p_location,
+#' var_pit, p_dispersion); written to output/tables/pit_tests.csv.
+pit_moment_tests <- function(scores, min_n = 15) {
+  nw_p <- function(z, L) {
+    z <- z[is.finite(z)]
+    n <- length(z)
+    if (n < min_n || sd(z) < 1e-12) return(NA_real_)
+    zb <- mean(z)
+    v <- mean((z - zb)^2)
+    if (L > 0) for (l in seq_len(min(L, n - 1))) {
+      gl <- mean((z[(l + 1):n] - zb) * (z[1:(n - l)] - zb))
+      v <- v + 2 * (1 - l / (L + 1)) * gl
+    }
+    v <- max(v, 1e-12)
+    2 * pt(-abs(zb / sqrt(v / n)), df = n - 1)
+  }
+  d <- scores[scores$measure == "q" & is.finite(scores$pit), ]
+  combos <- unique(d[, c("member", "variable", "h")])
+  rows <- lapply(seq_len(nrow(combos)), function(i) {
+    cb <- combos[i, ]
+    s <- d[d$member == cb$member & d$variable == cb$variable & d$h == cb$h, ]
+    s <- s[order(s$origin), ]
+    L <- cb$h - 1
+    data.frame(member = cb$member, variable = cb$variable, h = cb$h,
+               n = nrow(s), mean_pit = mean(s$pit),
+               p_location = nw_p(s$pit - 0.5, L),
+               var_pit = mean((s$pit - 0.5)^2),
+               p_dispersion = nw_p((s$pit - 0.5)^2 - 1 / 12, L))
+  })
+  do.call(rbind, rows)
 }

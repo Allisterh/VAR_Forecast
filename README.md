@@ -24,7 +24,7 @@ run); the rendered narrative report with figures is
 - [Correctness properties](#correctness-properties)
 - [Repository layout](#repository-layout)
 - [Data sources and audit](#data-sources-and-audit)
-- [Modelling decisions](#modelling-decisions) (D1–D18)
+- [Modelling decisions](#modelling-decisions) (D1–D22)
 
 ## Quick start
 
@@ -93,9 +93,9 @@ diagnostics green) is archived as `reports/report_real_data.html`.
 |---|---|
 | `reports/model_scorecard.md` (+ `.pdf`) | **the scorecard**: spec table for every model; forecast performance on the **level** error (CRPS / log score / RMSE by variable and horizon — cumulative level for GDP/inflation, the rate level for unemployment/cash rate) **and on quarterly growth** (each target's single-quarter outcome); and a **per-model profile** (spec, role, strengths/failure modes, and where each model actually ranks on both views) for every member |
 | `reports/report.html` | rendered Quarto report (methodology + results narrative, fan charts, PIT calibration) |
-| `output/tables/` | scores by horizon (log score, CRPS, RMSE), DM tests, diagnostics, transform spec, combination weights |
-| `output/figures/` | fan charts, PIT calibration histograms, weight-evolution plots, CRPS-by-horizon plots |
-| `output/forecasts/` | combined + per-member point/interval forecast table |
+| `output/tables/` | scores by horizon (log score, CRPS, RMSE), DM tests, PIT moment tests (`pit_tests.csv`), event probabilities (`event_probabilities.csv`), diagnostics, transform spec, combination weights |
+| `output/figures/` | fan charts, PIT calibration histograms, event-probability plot, weight-evolution plots, CRPS-by-horizon plots |
+| `output/forecasts/` | combined + per-member point/interval forecast table; conditional-scenario table (`forecast_table_conditional.csv`) when `report.conditional` is set |
 
 The complete record of every modelling choice and its rationale is the
 [Modelling decisions](#modelling-decisions) section below.
@@ -105,14 +105,18 @@ The complete record of every modelling choice and its rationale is the
 Seven block-exogenous VARs spanning prior family (Minnesota vs Villani
 steady-state), size (8-var SOE core vs 13-var medium), tightness
 (marginal-likelihood-selected λ vs fixed tight/loose), lag length and
-volatility (constant vs stochastic), plus four univariate anchors (random
-walk, AR(4), UCSV, unconditional mean). Combination schemes: equal weights,
-recursive log-score weights with forgetting, the Hall–Mitchell/Geweke–Amisano
-optimal pool (all shrunk toward equal, per variable × horizon bucket), and
-BMA reported as a diagnostic. Full per-model detail — specification, role,
-strengths and failure modes, and where each model ranks in the evaluation — is
-in [`reports/model_scorecard.md`](reports/model_scorecard.md) §5; the design
-rationale for the roster is decision [D8](#d8-the-suite-roster).
+volatility (constant vs stochastic), plus an **unrestricted control**
+(`small_unres`, identical to the workhorse but without block exogeneity, so
+the evaluation measures what the restriction buys — D19) and four univariate
+anchors (random walk, AR(4), UCSV, unconditional mean). Combination schemes:
+equal weights, recursive log-score weights with forgetting, inverse-CRPS
+weights (outlier-robust, D20), the Hall–Mitchell/Geweke–Amisano optimal pool
+(all shrunk toward equal, per variable × horizon bucket), and BMA reported as
+a diagnostic. Performance weights train on the level loss with the COVID
+realization window excluded (D20). Full per-model detail — specification,
+role, strengths and failure modes, and where each model ranks in the
+evaluation — is in [`reports/model_scorecard.md`](reports/model_scorecard.md)
+§6; the design rationale for the roster is decision [D8](#d8-the-suite-roster).
 
 ## Correctness properties
 
@@ -736,3 +740,139 @@ while gaining CRPS — wider LP tails cost log density when the realization is
 central; this is the known CRPS/log-score divergence on outlier windows and
 is why both are reported.
 
+
+### D19. An unrestricted control member (added 2026-07-04)
+
+**Choice.** `small_unres`: identical to `small_minn` (Gibbs, GLP-λ, SOC+DIO,
+4 lags) but with `block_exog: false` — the Minnesota prior treats every
+variable as domestic, so Australian variables may feed back into the foreign
+block. Supported by the `gibbs`/`ss` engines (in `conj_br`/`sv` the
+restriction is structural and the flag errors). The member is exempt from the
+block-exogeneity diagnostic gate (`block_exog_exempt` in the diagnostics
+table); its `block_exog_max` is still reported.
+
+**Why.** Until now every VAR imposed the restriction, so its forecast value —
+the central identifying choice of the suite — was asserted (via RBA RDP
+2013-06) rather than measured. The score gap between `small_unres` and
+`small_minn` is a clean within-suite A/B test. It also adds genuine pool
+diversity (it fails differently: spurious domestic→foreign feedback compounds
+at long horizons).
+
+**Rejected.** Removing the restriction from an SV or conjugate member (the
+mechanisms there are structural, not prior-based). **Config:** suite member
+`block_exog`.
+
+### D20. Combination weight training: robust loss, robust window (2026-07-04)
+
+**Problem (found in the 2026-07 audit).** Performance-based weights trained on
+*quarterly log scores including the 2020 realizations*: every sharp member
+takes catastrophic log scores on the COVID rebound quarters (mean far-horizon
+GDP log density −16.6 for `small_sv` with COVID in, −1.7 without), while the
+random walk survives on the width of its density alone. Result: `logscore`
+gave `rw` ~44% (BMA ~60%) of the far-bucket GDP weight, and the trained pools
+were then destroyed on the headline cumulative-level view (`combo_logscore`
+cum-GDP RMSE 11.6 at h=8 vs 3.6 for the best member). Two design flaws
+compounded: tail-dominated training scores, and a mismatch between the
+training loss (quarterly) and the reported headline loss (level).
+
+**Choice (three coordinated changes, config `combination:`):**
+1. `train_measure: level` — weights train on the same loss the headline
+   evaluation reports: cumulative-level scores for growth-modelled targets
+   (quarterly at h=1, where they coincide), the rate level for
+   level-modelled targets.
+2. `exclude_covid_train: true` — score observations realized in the COVID
+   exclusion window (2020Q1–2021Q2, `covid_exclusion_dates()`, the same
+   window as the ex-COVID score tables) are dropped from weight training.
+   This is the weight-estimation analogue of D17: treat the outlier's
+   likelihood contribution, keep everything else (Álvarez–Odendahl's
+   pre-specified-dates principle applies unchanged).
+3. A new `crps` scheme — weights ∝ inverse discounted-mean-CRPS, shrunk
+   toward equal. CRPS grows linearly (not logarithmically) in the miss
+   distance, so it is the outlier-robust performance weighting even without
+   exclusion windows.
+
+**Rejected.** Only raising `shrink_kappa` (treats the symptom, keeps the
+contaminated ranking); trimming `rw` from the pool (ad hoc — the benchmark is
+legitimate, the training criterion was the problem). **Config:**
+`combination.train_measure`, `combination.exclude_covid_train`,
+`combination.schemes`.
+
+### D21. Conditional forecasts: Waggoner–Zha (2026-07-04; supersedes D15)
+
+**Choice.** For the Gaussian engines (`gibbs`, `ss`, `conj_br`) conditioning
+on a future path of one variable (e.g. a market-implied cash-rate path) now
+draws the joint future shocks from their **exact conditional distribution**
+given the constraints (Waggoner–Zha 1999): per posterior draw, stack the
+future shocks u ~ N(0, blockdiag(s_t²Σ)), impose the linear constraints
+R u = r implied by the MA representation, and draw
+u* = u + C R′(R C R′)⁻¹(r − R u). Non-conditioned variables respond through
+both the lag dynamics and the error covariance; the conditioned path holds
+exactly; partial paths (NA steps) are supported. `conj_br` is handled by
+reconstructing the joint reduced form from the block-recursive draw
+(Σ_joint = [[Σf, ΣfG], [G′Σf, G′ΣfG + Σd]]). The SV engine falls back to
+hard substitution with a logged warning (its shocks are a t/scale mixture
+with a stochastic variance path — no Gaussian conditional exists).
+`report.conditional: {variable, path}` produces a scenario table
+(`output/forecasts/forecast_table_conditional.csv`) from the VAR members
+pooled with equal weights (univariate benchmarks cannot see the conditioning
+variable and are excluded).
+
+**Why.** The RBA's published forecasts are *conditioned on a market-implied
+cash-rate path*; hard substitution ignores the contemporaneous shock
+correlation and distorts exactly the cross-variable responses a scenario is
+supposed to show. Unit tests verify the conditioned path binds exactly and
+the conditional mean/variance match the analytic Gaussian update.
+
+**Config:** `report.conditional`; per-call `condition = list(variable, path,
+method)` in `simulate_paths()` (`method: substitute` restores D15 behaviour).
+
+### D22. Evaluation span, PIT moment tests, event probabilities, ar4 δ (2026-07-04)
+
+**Evaluation span.** `first_origin_frac: 0.45`, `max_origins: 60` (was
+0.65/36): origins now start ~2011 rather than 2017, roughly doubling DM power
+and diluting the COVID share of every mean score. Cost is compute only (the
+OOS cache absorbs re-runs).
+
+**PIT moment tests.** The χ² uniformity test is only valid at h=1 (multi-step
+PITs are serially correlated by construction). `pit_moment_tests()` adds
+Knüppel (2015)-style tests of E[PIT]=1/2 (location/bias) and
+E[(PIT−1/2)²]=1/12 (dispersion) with Newey–West (h−1) variances at every
+horizon → `output/tables/pit_tests.csv`.
+
+**Event probabilities.** `output/tables/event_probabilities.csv` (+ figure):
+P(year-ended GDP growth < 0), P(year-ended trimmed-mean inflation in
+[2, 3]%), P(unemployment rises ≥ 0.75pp), by horizon, from the final pooled
+forecast. Pooling is at the probability level (exact for a linear pool);
+member probabilities come from joint path draws so year-ended sums preserve
+within-path dependence. Thresholds in `report.events`.
+
+**ar4 benchmark δ prior.** The AR(4) lag-1 prior mean is now the variable's
+Minnesota δ (1 for levels, 0 for growth) instead of 0 for everything —
+consistent with the VAR members' prior centre.
+
+**SV adaptive thinning.** Extending the origins back to ~2011 exposed one
+small-sample origin where a single `medium_minn` equation's own-lag chain
+mixed slowly (ESS 16 < the 50 gate; beta and the volatility path are
+strongly coupled at short T). The SV engine now retries a slow-mixing
+equation with 3×/9× thinning — the same philosophy as the UCSV MCSE gate
+(D9): spend compute to meet the bar, report the final ESS honestly, never
+relax the gate.
+
+**2021Q3 robustness (run 2026-07-04).** Adding the Delta-lockdown quarter
+(2021Q3, AU GDP ≈ −1.9%) to the treated COVID quarters and re-running the
+full OOS for every affected member changes nothing: CRPS ratios 0.989–1.007,
+mean log-density shifts −0.20 to +0.07 nats — all within noise
+(`reports/covid_2021q3_robustness.csv`, script
+`scripts/covid_robustness_2021q3.R`). The 2020Q1–Q3-only treatment therefore
+stands on evidence: the estimated decay path already absorbs 2021Q3.
+
+**Foreign-block probe (2026-07-04, negative result).** Re-checked every wired
+source for a fresh Asia/trade-weighted activity series: DBnomics OECD G20 GDP
+still ends 2023Q3, FRED's China GDP (OECD MEI-sourced `CHNGDPNQDSMEI`) is
+frozen at 2023Q3 (FRED dropped OECD updates), IMF IFS quarterly China GDP
+errors on DBnomics. A stale series cannot simply be added: the balanced-panel
+trim would truncate *every* variable to 2023Q3. The US-only world proxy
+therefore remains the documented simplification (D1/D18); lifting it needs
+either a manually-supplied trading-partner GDP file (the external-forecasts
+hook pattern) or ragged-edge estimation — both scoped as extensions, neither
+wired.

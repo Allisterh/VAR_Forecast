@@ -249,17 +249,26 @@ default:
       set: small
       lags: 4
       prior: {lambda: 0.05, soc: true, dio: true, soc_mu: 1.0, dio_delta: 1.0}
+    # UNRESTRICTED control (D19): identical to small_minn but WITHOUT block
+    # exogeneity, so the evaluation measures what the restriction buys.
+    # Exempt from the block-exogeneity diagnostic gate by construction.
+    - name: small_unres
+      engine: gibbs
+      set: small
+      lags: 4
+      block_exog: false
+      prior: {lambda: auto, soc: true, dio: true, soc_mu: 1.0, dio_delta: 1.0}
 
   benchmarks: [rw, ar4, ucsv, ucmean]
 
   evaluation:
-    first_origin_frac: 0.65    # first forecast origin as fraction of sample
-    max_origins: 36            # cap on number of origins (compute budget)
+    first_origin_frac: 0.45    # first forecast origin as fraction of sample
+    max_origins: 60            # cap on number of origins (compute budget)
     window: expanding          # expanding | rolling
     rolling_length: 80
 
   combination:
-    schemes: [equal, logscore, pool, bma]
+    schemes: [equal, logscore, crps, pool, bma]
     horizon_buckets:
       near: [1, 2, 3, 4]
       medium: [5, 6, 7, 8]
@@ -267,9 +276,32 @@ default:
     shrink_kappa: 0.30         # weight on equal weights in the shrinkage
     forgetting: 0.95           # discount on past log scores
     min_train_origins: 8       # origins of scores needed before non-equal weights
+    # D20: weight-training robustness.
+    # train_measure level: performance weights train on the same loss the
+    #   headline evaluation reports (cumulative level for growth targets, the
+    #   rate level for level targets); "quarterly" restores q-score training.
+    # exclude_covid_train: drop score observations realized in the COVID
+    #   exclusion window (2020Q1-2021Q2) from weight training -- a handful of
+    #   2020 realizations otherwise dominate the discounted log-score sums.
+    train_measure: level       # level | quarterly
+    exclude_covid_train: true
 
   parallel:
     workers: 6
 
   report:
     fan_quantiles: [0.05, 0.15, 0.25, 0.35, 0.5, 0.65, 0.75, 0.85, 0.95]
+    # Policy-relevant event probabilities from the final pooled forecast
+    # (output/tables/event_probabilities.csv + figure).
+    events:
+      recession_ye_gdp_below: 0.0    # P(year-ended GDP growth < 0)
+      inflation_band: [2.0, 3.0]     # P(year-ended trimmed mean in the band)
+      unemp_rise: 0.75               # P(unemployment up >= 0.75pp vs jump-off)
+    # Optional scenario: conditional forecasts given a future path for one
+    # variable (Waggoner-Zha for the Gaussian engines; README.md D21), e.g. a
+    # market-implied cash-rate path. Uncomment and set the path (length <= 12,
+    # in variable units; shorter paths leave later horizons unconstrained):
+    # conditional:
+    #   variable: cash_rate
+    #   path: [3.60, 3.35, 3.10, 3.10]
+    conditional: ~

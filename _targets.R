@@ -99,8 +99,27 @@ list(
   }),
   tar_target(figures, make_figures(allscores, combos$weights, final_fc, td, spec, cfg)),
 
+  # PIT moment tests at every horizon (location + dispersion, NW-robust)
+  tar_target(pit_tab, {
+    dir.create("output/tables", recursive = TRUE, showWarnings = FALSE)
+    pt <- pit_moment_tests(allscores)
+    write.csv(pt, "output/tables/pit_tests.csv", row.names = FALSE)
+    pt
+  }),
+
+  # policy-relevant event probabilities from the final pooled forecast
+  tar_target(event_probs, {
+    ep <- event_probabilities(final_fc, td, spec, cfg)
+    if (!is.null(ep)) plot_event_probs(ep)
+    ep
+  }),
+
+  # optional scenario conditional on a configured path (report.conditional)
+  tar_target(conditional_fc, conditional_forecasts(td, spec, cfg)),
+
   tar_target(report, {
     figures; fc_table; eval_tables; diag_tab; calibration; weight_table
+    pit_tab; event_probs; conditional_fc
     if (nzchar(Sys.which("quarto"))) {
       tryCatch({
         quarto::quarto_render("reports/report.qmd", quiet = TRUE)

@@ -94,6 +94,9 @@ mcmc_diagnostics <- function(own_lag_draws, stable_share) {
 fit_conj_br <- function(y, member, spec_m, cfg, prior, weights = NULL) {
   M <- ncol(y); p <- member$lags
   blocks <- spec_m$block
+  if (isFALSE(member$block_exog))
+    stop("block_exog: false is only supported by the gibbs/ss engines ",
+         "(block exogeneity is structural in conj_br)")
   nf <- sum(blocks == "foreign"); nd <- M - nf
   # the block-recursive split below indexes (nf+1):M / seq_len(nf); both blocks
   # must be non-empty (a degenerate partition would mis-index in R).
@@ -182,6 +185,13 @@ fit_conj_br <- function(y, member, spec_m, cfg, prior, weights = NULL) {
 fit_gibbs <- function(y, member, spec_m, cfg, prior, weights = NULL) {
   M <- ncol(y); p <- member$lags
   blocks <- spec_m$block
+  # member block_exog: false -> UNRESTRICTED variant (README.md D19): the
+  # Minnesota prior treats every variable as domestic (no near-zero prior on
+  # domestic lags in foreign equations). The block-exog diagnostic is still
+  # computed against the true partition but flagged exempt from the gate --
+  # this member exists precisely to measure what the restriction buys.
+  unres <- isFALSE(member$block_exog)
+  blocks_prior <- if (unres) rep("domestic", M) else blocks
   sigma <- ar_sigmas(y, weights = weights); delta <- spec_m$delta
   ndraw <- cfg$mcmc$ndraw; nburn <- cfg$mcmc$nburn
 
@@ -200,7 +210,7 @@ fit_gibbs <- function(y, member, spec_m, cfg, prior, weights = NULL) {
   Y <- xy$Y; X <- xy$X
   T_n <- nrow(Y); K <- ncol(X)
 
-  mn <- minnesota_prior(M, p, sigma, delta, blocks, lambda = prior$lambda,
+  mn <- minnesota_prior(M, p, sigma, delta, blocks_prior, lambda = prior$lambda,
                         block_exog_sd = cfg$mcmc$block_exog_prior_sd)
   b0vec <- as.vector(mn$b0)
   V0inv <- as.vector(1 / mn$s0^2)
@@ -227,6 +237,7 @@ fit_gibbs <- function(y, member, spec_m, cfg, prior, weights = NULL) {
   own <- sapply(seq_len(M), function(i) Bd[, 1 + i, i])
   diag_ <- mcmc_diagnostics(own, stable)
   diag_$block_exog_max <- block_exog_metric(Bbar, M, p, blocks)
+  diag_$block_exog_exempt <- unres
 
   structure(list(engine = "gibbs", M = M, p = p,
                  varnames = spec_m$variable, blocks = blocks,
@@ -239,6 +250,8 @@ fit_gibbs <- function(y, member, spec_m, cfg, prior, weights = NULL) {
 fit_ss <- function(y, member, spec_m, cfg, prior, weights = NULL) {
   M <- ncol(y); p <- member$lags
   blocks <- spec_m$block
+  unres <- isFALSE(member$block_exog)         # D19: unrestricted variant
+  blocks_prior <- if (unres) rep("domestic", M) else blocks
   sigma <- ar_sigmas(y, weights = weights); delta <- spec_m$delta
   ndraw <- cfg$mcmc$ndraw; nburn <- cfg$mcmc$nburn
   w_rows <- if (is.null(weights)) rep(1, nrow(y) - p) else weights[(p + 1):nrow(y)]
@@ -247,7 +260,7 @@ fit_ss <- function(y, member, spec_m, cfg, prior, weights = NULL) {
   psi0 <- ssp$psi0; psi_prec <- 1 / ssp$psi_sd^2
 
   # Minnesota prior on the (no-intercept) lag coefficients
-  mn <- minnesota_prior(M, p, sigma, delta, blocks, lambda = prior$lambda,
+  mn <- minnesota_prior(M, p, sigma, delta, blocks_prior, lambda = prior$lambda,
                         block_exog_sd = cfg$mcmc$block_exog_prior_sd)
   b0 <- mn$b0[-1, , drop = FALSE]; s0 <- mn$s0[-1, , drop = FALSE]
   b0vec <- as.vector(b0); V0inv <- as.vector(1 / s0^2)
@@ -314,6 +327,7 @@ fit_ss <- function(y, member, spec_m, cfg, prior, weights = NULL) {
   own <- sapply(seq_len(M), function(i) Ad[, i, i])
   diag_ <- mcmc_diagnostics(own, stable)
   diag_$block_exog_max <- block_exog_metric(rbind(0, Abar), M, p, blocks)
+  diag_$block_exog_exempt <- unres
 
   structure(list(engine = "ss", M = M, p = p,
                  varnames = spec_m$variable, blocks = blocks,
@@ -363,6 +377,9 @@ sv_equation_prior <- function(i, eq, sigma, delta, lambda) {
 fit_sv <- function(y, member, spec_m, cfg, prior, weights = NULL) {
   if (!has_stochvol())   # all_members() drops SV members; this is a backstop
     stop("the 'stochvol' package is required for SV member '", member$name, "'")
+  if (isFALSE(member$block_exog))
+    stop("block_exog: false is only supported by the gibbs/ss engines ",
+         "(block exogeneity is structural in the sv triangular design)")
   M <- ncol(y); p <- member$lags
   blocks <- spec_m$block
   sigma <- ar_sigmas(y); delta <- spec_m$delta
@@ -380,7 +397,7 @@ fit_sv <- function(y, member, spec_m, cfg, prior, weights = NULL) {
     sigma2 = stochvol::sv_gamma(0.5, 0.5),
     nu = if (use_t) stochvol::sv_exponential(0.1) else stochvol::sv_infinity())
 
-  for (i in seq_len(M)) {
+  run_eq <- function(i, thin = 1L) {
     eq <- sv_equation_design(y, i, p, blocks)
     pr <- sv_equation_prior(i, eq, sigma, delta, prior$lambda)
     Tn <- length(eq$y); Kx <- ncol(eq$X)
@@ -400,7 +417,7 @@ fit_sv <- function(y, member, spec_m, cfg, prior, weights = NULL) {
     hT  <- numeric(ndraw)
     pdr <- matrix(NA_real_, ndraw, 4,
                   dimnames = list(NULL, c("mu", "phi", "sigma", "nu")))
-    for (it in seq_len(nburn + ndraw)) {
+    for (it in seq_len(nburn + ndraw * thin)) {
       # beta | h, mix: weighted regression (conditional variance exp(h)*mix)
       w <- exp(-h / 2) / sqrt(mix)
       Xw <- eq$X * w; yw <- eq$y * w
@@ -422,15 +439,36 @@ fit_sv <- function(y, member, spec_m, cfg, prior, weights = NULL) {
       para$sigma <- upd$para[1, "sigma"]
       if (use_t) para$nu <- upd$para[1, "nu"]
       para$latent0 <- h[1]
-      if (it > nburn) {
-        d <- it - nburn
+      if (it > nburn && (it - nburn) %% thin == 0L) {
+        d <- (it - nburn) %/% thin
         bdr[d, ] <- beta; hT[d] <- h[Tn]
         pdr[d, ] <- c(para$mu, para$phi, para$sigma,
                       if (is.finite(para$nu)) para$nu else Inf)
       }
     }
-    eqs[[i]] <- list(design = eq, beta = bdr, hT = hT, svpara = pdr,
-                     prior = pr)
+    list(design = eq, beta = bdr, hT = hT, svpara = pdr, prior = pr)
+  }
+  own_ess <- function(e, i) {
+    r <- which(e$design$lag_meta$var == i & e$design$lag_meta$lag == 1)
+    x <- e$beta[, 1 + r]
+    if (sd(x) < 1e-12) return(NA_real_)
+    safe_ess(x)
+  }
+  for (i in seq_len(M)) {
+    e <- run_eq(i)
+    # Adaptive thinning retry (the same philosophy as the UCSV MCSE gate,
+    # README.md D9): at small-sample origins a single equation's own-lag
+    # chain can mix slowly (beta and the volatility path are strongly
+    # coupled when T is short); rerun that equation with 3x/9x thinning
+    # until its own-lag ESS clears the convergence gate. The final ESS is
+    # reported honestly either way.
+    for (thin in c(3L, 9L)) {
+      es <- own_ess(e, i)
+      if (!is.finite(es) || es >= 50) break
+      log_debug("sv eq {i}: own-lag ESS {round(es, 1)} < 50, retrying thin={thin}")
+      e <- run_eq(i, thin)
+    }
+    eqs[[i]] <- e
   }
 
   own <- sapply(seq_len(M), function(i) {

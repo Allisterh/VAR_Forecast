@@ -26,7 +26,7 @@ final_forecasts <- function(td, spec, cfg, scores) {
     pool_dr <- matrix(NA_real_, 600, H)
     for (bn in names(buckets)) {
       hs <- unlist(buckets[[bn]])
-      w <- combo_weights(scheme, scores, v, hs, T_n + 1, mnames, cfg)
+      w <- combo_weights(scheme, scores, v, hs, T_n + 1, mnames, cfg, spec)
       wtab[[length(wtab) + 1]] <- data.frame(
         scheme = scheme, variable = v, bucket = bn,
         member = names(w), weight = as.numeric(w))
@@ -44,6 +44,45 @@ final_forecasts <- function(td, spec, cfg, scores) {
   }
   list(member_draws = draws, pooled = pooled, weights = do.call(rbind, wtab),
        origin = T_n, origin_date = td$date[T_n])
+}
+
+#' Scenario forecasts conditional on a configured future path (README.md D21),
+#' e.g. a market-implied cash-rate path: cfg$report$conditional gives
+#' {variable:, path: [..]}. Runs the VAR members only (the univariate
+#' benchmarks cannot see the conditioning variable) with Waggoner-Zha
+#' conditional simulation (substitution fallback for the SV engine), pools
+#' them with equal weights, and writes the scenario table alongside the
+#' unconditional one. Returns the table, or NULL when no scenario configured.
+conditional_forecasts <- function(td, spec, cfg,
+                                  out_dir = "output/forecasts") {
+  cc <- cfg$report$conditional
+  if (is.null(cc) || is.null(cc$variable)) return(NULL)
+  condition <- list(variable = cc$variable,
+                    path = as.numeric(unlist(cc$path)), method = "wz")
+  members <- Filter(function(m) m$kind == "var", all_members(cfg))
+  H <- cfg$horizons
+  draws <- list()
+  for (m in members) {
+    set.seed(derive_seed(cfg$master_seed, paste0("cond-", m$name)))
+    fc <- forecast_at_origin(m, td, spec, cfg, condition = condition)
+    draws[[m$name]] <- fc$draws
+  }
+  tgt <- spec$variable[spec$target]
+  rows <- list()
+  for (v in tgt) {
+    all_dr <- do.call(rbind, lapply(draws, function(d) d[, , v]))
+    qm <- t(apply(all_dr, 2, quantile, probs = c(0.05, 0.5, 0.95)))
+    rows[[v]] <- data.frame(variable = v, h = seq_len(H),
+                            point = qm[, 2], lo90 = qm[, 1], hi90 = qm[, 3])
+  }
+  tab <- do.call(rbind, rows)
+  tab$conditioned_on <- cc$variable
+  tab$origin_date <- td$date[nrow(td)]
+  dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+  write.csv(tab, file.path(out_dir, "forecast_table_conditional.csv"),
+            row.names = FALSE)
+  log_info("conditional scenario written ({cc$variable} path, {length(members)} VAR members)")
+  tab
 }
 
 #' Forecast table: point + interval for combined and per-member forecasts.
@@ -81,8 +120,8 @@ evaluation_tables <- function(allscores, dm, cfg = NULL,
   sm <- summarise_scores(allscores)
   write.csv(sm, file.path(out_dir, "scores_by_horizon.csv"), row.names = FALSE)
   if (!is.null(cfg$covid$quarters)) {
-    excl <- seq(as.Date(min(unlist(cfg$covid$quarters))), by = "quarter",
-                length.out = 6)   # the scaled quarters + the rebound tail
+    # scaled quarters + rebound tail; same window combine.R uses for training
+    excl <- covid_exclusion_dates(cfg)
     sm_ex <- summarise_scores(allscores, exclude_dates = excl)
     write.csv(sm_ex, file.path(out_dir, "scores_by_horizon_excovid.csv"),
               row.names = FALSE)
@@ -214,6 +253,8 @@ diagnostics_table <- function(oos_all, checks, out_dir = "output/tables") {
                d$stable_share), numeric(1)))),
       block_exog_max = max(vapply(dg, function(d)
         ifelse(is.null(d$block_exog_max), 0, d$block_exog_max), numeric(1))),
+      block_exog_exempt = any(vapply(dg, function(d)
+        isTRUE(d$block_exog_exempt), logical(1))),
       converged_all = all(vapply(dg, function(d) isTRUE(d$converged), logical(1))),
       sanity_all = all(vapply(sn, function(s) isTRUE(s$ok), logical(1))))
   })
@@ -225,9 +266,13 @@ diagnostics_table <- function(oos_all, checks, out_dir = "output/tables") {
 }
 
 #' Hard gate: stop the pipeline if a section-9 correctness property fails.
+#' Members with block_exog_exempt (the deliberately UNRESTRICTED variant,
+#' README.md D19) are excluded from the block-exogeneity gate only.
 assert_diagnostics <- function(diag_tab) {
+  ex <- if ("block_exog_exempt" %in% names(diag_tab))
+    diag_tab$block_exog_exempt else FALSE
   stopifnot(
-    "block exogeneity violated"   = all(diag_tab$block_exog_max < 1e-2),
+    "block exogeneity violated"   = all(ex | diag_tab$block_exog_max < 1e-2),
     "MCMC convergence failure"    = all(diag_tab$converged_all),
     "explosive forecasts"         = all(diag_tab$sanity_all),
     "look-ahead detected"         = all(diag_tab$no_lookahead),

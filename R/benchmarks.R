@@ -31,10 +31,14 @@ simulate_paths.post_rw <- function(post, y, h, ndraw, condition = NULL,
 }
 
 #' Bayesian AR(p) per variable: conjugate normal-inverse-gamma with
-#' Minnesota-style lag shrinkage (sd = 0.5/lag); iterated density forecasts.
-#' A flat ridge lets near-unit oscillatory coefficient draws resonate off
-#' COVID-sized outliers in the initial conditions.
-fit_ar <- function(y, cfg, p = 4, weights = NULL) {
+#' Minnesota-style lag shrinkage (sd = 0.5/lag) and the Minnesota own-lag
+#' prior MEAN delta on the first lag (1 for persistent level variables,
+#' 0 for mean-reverting growth) -- consistent with the VAR members' prior
+#' centre. Iterated density forecasts; a flat ridge lets near-unit
+#' oscillatory coefficient draws resonate off COVID-sized outliers in the
+#' initial conditions.
+fit_ar <- function(y, cfg, p = 4, weights = NULL, delta = NULL) {
+  if (is.null(delta)) delta <- rep(0, ncol(y))
   fits <- lapply(seq_len(ncol(y)), function(j) {
     z <- y[, j]
     xy <- build_XY(matrix(z, ncol = 1), p)
@@ -45,9 +49,10 @@ fit_ar <- function(y, cfg, p = 4, weights = NULL) {
     }
     K <- ncol(X)
     V0inv <- diag(c(1e-4, (seq_len(p) / 0.5)^2))  # loose intercept, sd 0.5/l on lag l
+    b0 <- c(0, delta[j], rep(0, p - 1))           # prior mean: delta on lag 1
     P <- crossprod(X) + V0inv
     cP <- chol(P)
-    bhat <- backsolve(cP, forwardsolve(t(cP), crossprod(X, Y)))
+    bhat <- backsolve(cP, forwardsolve(t(cP), crossprod(X, Y) + V0inv %*% b0))
     resid <- Y - drop(X %*% bhat)
     s2 <- sum(resid^2) / (length(Y) - K)
     list(bhat = bhat, cP = cP, s2 = s2, df = length(Y) - K, p = p)
@@ -255,11 +260,12 @@ simulate_paths.post_ucmean <- function(post, y, h, ndraw, condition = NULL,
   paths
 }
 
-#' Dispatcher mirroring fit_var_member.
-fit_benchmark <- function(y_targets, name, cfg, weights = NULL) {
+#' Dispatcher mirroring fit_var_member. delta: Minnesota own-lag prior means
+#' for the target columns (used by ar4).
+fit_benchmark <- function(y_targets, name, cfg, weights = NULL, delta = NULL) {
   switch(name,
          rw     = fit_rw(y_targets, cfg, weights = weights),
-         ar4    = fit_ar(y_targets, cfg, p = 4, weights = weights),
+         ar4    = fit_ar(y_targets, cfg, p = 4, weights = weights, delta = delta),
          ucsv   = fit_ucsv(y_targets, cfg),     # already outlier-robust (t)
          ucmean = fit_ucmean(y_targets, cfg, weights = weights),
          stop("unknown benchmark: ", name))

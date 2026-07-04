@@ -6,15 +6,44 @@
 # schemes except BMA are shrunk toward equal weights (combination puzzle).
 # The linear pool's log score uses log-sum-exp; its CRPS uses draws resampled
 # from the mixture; its PIT is the weighted member PIT (exact mixture CDF).
+#
+# Weight TRAINING (README.md D20):
+#  * train_measure "level" (default): weights train on the same loss the
+#    headline evaluation reports -- the cumulative-level (cum) scores for
+#    growth-modelled (dlog) targets (q at h=1, where cum == q) and the rate
+#    level (q) for level-modelled targets. "quarterly" trains on q throughout
+#    (the pre-D20 behaviour).
+#  * exclude_covid_train TRUE (default): score observations whose REALIZATION
+#    falls in the COVID exclusion window (covid_exclusion_dates) are dropped
+#    from weight training. Rationale: a handful of 2020 realizations dominate
+#    discounted log-score sums and hand the far-horizon weights to whichever
+#    member has the widest density (observed: rw earned 44-60% of the far
+#    gdp_growth weight, then destroyed the pooled level forecasts). This is
+#    the weight-estimation analogue of the D17 principle: treat the outlier's
+#    likelihood contribution, keep everything else.
 
 #' Training scores available at origin t for variable v and horizons hs.
 #' Restricted to (origin, h) cells where EVERY member has a score, so that
 #' sums of log densities are comparable across members (a member with fewer
 #' negative terms would otherwise get spuriously large weight).
-.train_scores <- function(scores, v, hs, t, members) {
-  s <- scores[scores$variable == v & scores$measure == "q" &
+#' train_level: use the level-view measures (cum + q at h=1) for dlog targets.
+#' spec may be NULL (falls back to quarterly training).
+.train_scores <- function(scores, v, hs, t, members, cfg = NULL, spec = NULL) {
+  train_level <- !is.null(cfg) &&
+    identical(cfg$combination$train_measure, "level") && !is.null(spec)
+  use_cum <- train_level &&
+    identical(spec$transform[spec$variable == v], "dlog")
+  msr_ok <- if (use_cum) {
+    (scores$measure == "cum") | (scores$measure == "q" & scores$h == 1)
+  } else scores$measure == "q"
+  s <- scores[msr_ok & scores$variable == v &
               scores$h %in% hs & (scores$origin + scores$h) <= t &
               scores$member %in% members, ]
+  if (nrow(s) && !is.null(cfg) &&
+      isTRUE(cfg$combination$exclude_covid_train)) {
+    excl <- covid_exclusion_dates(cfg)
+    if (length(excl)) s <- s[!(.qidx(s$date) %in% .qidx(excl)), ]
+  }
   if (!nrow(s)) return(s)
   cell <- paste(s$origin, s$h)
   complete <- names(which(table(cell) == length(members)))
@@ -27,6 +56,14 @@
   w <- forgetting^age
   vapply(split(seq_len(nrow(tr)), tr$member),
          function(ix) sum(w[ix] * tr$logdens[ix]), numeric(1))
+}
+
+#' Discounted MEAN CRPS per member (same forgetting as the log-score scheme).
+.disc_crps <- function(tr, t, forgetting) {
+  age <- t - (tr$origin + tr$h)
+  w <- forgetting^age
+  vapply(split(seq_len(nrow(tr)), tr$member),
+         function(ix) sum(w[ix] * tr$crps[ix]) / sum(w[ix]), numeric(1))
 }
 
 #' Number of distinct training origins.
@@ -63,12 +100,13 @@ optimal_pool_weights <- function(tr, members, t, forgetting) {
 }
 
 #' Compute weights for one (scheme, variable, bucket) at origin t.
-combo_weights <- function(scheme, scores, v, hs, t, members, cfg) {
+#' spec (optional) enables level-loss training for dlog targets (D20).
+combo_weights <- function(scheme, scores, v, hs, t, members, cfg, spec = NULL) {
   n <- length(members)
   eq <- setNames(rep(1 / n, n), members)
   # without scoringRules there are no log scores to weight on -> equal weights
   if (scheme == "equal" || !has_scoringrules()) return(eq)
-  tr <- .train_scores(scores, v, hs, t, members)
+  tr <- .train_scores(scores, v, hs, t, members, cfg, spec)
   if (.n_train_origins(tr) < cfg$combination$min_train_origins) return(eq)
   if (scheme == "logscore") {
     ld <- .disc_logdens(tr, t, cfg$combination$forgetting)
@@ -77,6 +115,17 @@ combo_weights <- function(scheme, scores, v, hs, t, members, cfg) {
     # .train_scores keeps only complete cells)
     w <- exp(ld - max(ld, na.rm = TRUE))
     w[!is.finite(w)] <- 0
+    if (sum(w) <= 0) return(eq)
+    return(.shrink(w / sum(w), cfg$combination$shrink_kappa))
+  }
+  if (scheme == "crps") {
+    # inverse discounted-mean-CRPS weights: scale-free and far less
+    # tail-sensitive than log-score weights (CRPS grows linearly, not
+    # logarithmically, in the outlier distance) -- the robust
+    # performance-weighting option (D20).
+    cm <- .disc_crps(tr, t, cfg$combination$forgetting)[members]
+    w <- 1 / cm
+    w[!is.finite(w) | w < 0] <- 0
     if (sum(w) <= 0) return(eq)
     return(.shrink(w / sum(w), cfg$combination$shrink_kappa))
   }
@@ -128,7 +177,7 @@ combine_all <- function(scores, draws_env, td, spec, cfg) {
     for (t in origins) {
       for (bn in names(buckets)) {
         hs <- unlist(buckets[[bn]])
-        w <- combo_weights(scheme, scores, v, hs, t, members, cfg)
+        w <- combo_weights(scheme, scores, v, hs, t, members, cfg, spec)
         w_rows[[length(w_rows) + 1]] <- data.frame(
           scheme = scheme, variable = v, bucket = bn, origin = t,
           member = names(w), weight = as.numeric(w))

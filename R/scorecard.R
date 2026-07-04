@@ -111,7 +111,20 @@
       "shrinkage buys stability where lightly-parametrised models wander."),
     watch = paste0("Best or near-best at far-horizon GDP (the tight prior stops it over-reacting). ",
       "Can be too rigid at short horizons, missing genuine dynamics the looser members catch."),
-    refs = "D4, D5, D8"))
+    refs = "D4, D5, D8"),
+  small_unres = list(
+    distinctive = paste0("Identical to `small_minn` in every respect — same engine, lags, ",
+      "data-driven shrinkage, SOC/DIO priors — **except that block exogeneity is NOT ",
+      "imposed**: the prior lets Australian variables feed back into world activity, ",
+      "commodity prices and the fed funds rate."),
+    role = paste0("The **control experiment** for the suite's central identifying restriction: ",
+      "the score gap between `small_unres` and `small_minn` measures, inside this ",
+      "evaluation, what imposing the small-open-economy structure buys (RBA RDP 2013-06 ",
+      "argues it matters; this member lets our own data confirm or deny)."),
+    watch = paste0("Economically misspecified by construction (it implies Australia moves world ",
+      "demand). Watch whether its forecasts deteriorate at medium/far horizons, where the ",
+      "spurious feedback loops compound; it is exempt from the block-exogeneity gate."),
+    refs = "D19"))
 
 .benchmark_profiles <- list(
   rw = list(
@@ -138,16 +151,28 @@
 .combo_profiles <- list(
   combo_equal = list(
     how = "Equal weights on every member, per variable x horizon bucket.",
-    note = "The forecast-combination-puzzle benchmark and the recommended robust default: in the evaluation it has the best mean log score at every horizon and the best far-horizon CRPS. Hard to beat because it never over-fits weights."),
+    note = "The forecast-combination-puzzle benchmark and the recommended robust default. Hard to beat because it never over-fits weights."),
   combo_logscore = list(
     how = "Weights proportional to each member's recent log predictive score, with a forgetting factor, shrunk toward equal.",
-    note = "Adapts to which members are forecasting well lately; the shrinkage and forgetting guard against over-concentrating on a member that was lucky."),
+    note = "Adapts to which members are forecasting well lately; the shrinkage and forgetting guard against over-concentrating on a member that was lucky. Log scores are tail-sensitive, so this scheme reacts hardest to outlier episodes (weights train on the level loss with COVID realizations excluded; D20)."),
+  combo_crps = list(
+    how = "Weights proportional to the inverse of each member's discounted mean CRPS, shrunk toward equal.",
+    note = "The outlier-robust performance weighting (D20): CRPS grows linearly rather than logarithmically in the miss distance, so one extreme quarter cannot dominate the weights the way it can for the log-score scheme."),
   combo_pool = list(
     how = "Optimal prediction pool (Hall-Mitchell / Geweke-Amisano): weights on the simplex that maximise the historical *pooled* log score, shrunk toward equal.",
-    note = "Unlike BMA it does not degenerate to a single model ('all models are false but useful'); competitive with equal weights and occasionally better at near horizons."),
+    note = "Unlike BMA it does not degenerate to a single model ('all models are false but useful')."),
   combo_bma = list(
     how = "Bayesian model averaging by predictive likelihood — no shrinkage.",
     note = "**Diagnostic only.** It concentrates weight on the single best-fitting member, so it answers 'which model does the data favour' rather than serving as a robust combination; reported, not recommended."))
+
+# scheme-code -> one-line description for the 1c table (kept in sync with
+# .combo_profiles; unknown schemes fall back to the profile text).
+.scheme_desc <- c(
+  equal    = "Equal weights (the benchmark pool — hard to beat)",
+  logscore = "Recursive log-score weights, with forgetting",
+  crps     = "Inverse discounted-mean-CRPS weights (outlier-robust)",
+  pool     = "Optimal prediction pool (Hall-Mitchell / Geweke-Amisano)",
+  bma      = "Bayesian model averaging — reported as a diagnostic only")
 
 #' Auto-generated one-line spec for a VAR suite member.
 .spec_oneliner <- function(m, cfg) {
@@ -398,10 +423,39 @@ write_model_scorecard <- function(scores, spec, dm, diag, cfg,
       "(§3) is the **quarterly-growth** view: each target's single-quarter outcome ",
       "at t+h. The year-ended *growth* scores remain in ",
       "`output/tables/scores_by_horizon.csv`.  ")
+  bex <- if ("block_exog_exempt" %in% names(diag)) diag$block_exog_exempt else FALSE
   d9 <- all(diag$converged_all & diag$sanity_all & diag$no_lookahead & diag$reproducible) &&
-        all(diag$block_exog_max < 1e-2)
+        all(bex | diag$block_exog_max < 1e-2)
   add("**Diagnostics (§9):** ", if (d9) "all green" else "SEE DIAGNOSTICS",
       " (block exogeneity, MCMC convergence, forecast sanity, no-look-ahead, reproducibility).\n")
+
+  # ---- 0. Orientation for a first-time reader ----
+  add("## 0. How to read this scorecard\n")
+  add("**What this document is.** A league table for ", length(cfg$suite) + length(cfg$benchmarks),
+      " forecasting models (plus their pooled combinations) that were all asked to do the same job: ",
+      "at each of ", cfg$evaluation$max_origins, " past quarters (\"forecast origins\"), using only ",
+      "data available at that date, forecast the Australian economy 1-12 quarters ahead. Every ",
+      "forecast was then scored against what actually happened. Models that look good here look ",
+      "good because they *predicted*, not because they *fitted*.\n")
+  add("**The forecasts are densities, not points.** Each model produces a full probability ",
+      "distribution per variable per horizon. So we score three things: whether the centre was ",
+      "right (**RMSE** — root-mean-squared error of the point forecast), and whether the whole ",
+      "distribution was right (**CRPS** and **log score**). Intuition: CRPS is the average distance ",
+      "between the forecast distribution and the realized outcome — like an absolute error that ",
+      "also rewards honest uncertainty; *lower is better*. The log score is the log of the ",
+      "probability density the model assigned to what happened; *higher is better*, and it punishes ",
+      "a model brutally for calling an outcome \"nearly impossible\" that then occurs. CRPS and the ",
+      "log score usually agree; they diverge on outlier episodes (COVID), which is why both are shown.\n")
+  add("**Horizons and buckets.** h = 1 means one quarter ahead, h = 12 three years ahead. Weights ",
+      "and summaries group horizons into buckets: **near** (h 1-4), **medium** (5-8), **far** (9-12).\n")
+  add("**The two views.** §2 scores where the *level* of each series lands (the cumulative path — ",
+      "\"where is the price level in two years?\"), which is what policy usually cares about and is ",
+      "the headline. §3 scores each single quarter's outcome in isolation. A model can be good at ",
+      "one and poor at the other: the level view compounds any persistent bias, the quarterly view ",
+      "rewards getting the wiggles right.\n")
+  add("**Members vs combinations.** Rows named `combo_*` are not models but *pools* — weighted ",
+      "mixtures of every model's density (§1c). The suite's premise is that no single model wins ",
+      "everywhere, so the production forecast is a pool; the members exist to make the pool good.\n")
 
   # ---- 1. Model suite specifications ----
   add("## 1. The models\n")
@@ -437,10 +491,13 @@ write_model_scorecard <- function(scores, spec, dm, diag, cfg,
       "recursive (no look-ahead).\n")
   add("| Scheme | How weights are set |")
   add("|:--|:--|")
-  add("| `combo_equal` | Equal weights (the benchmark pool — hard to beat) |")
-  add("| `combo_logscore` | Recursive log-score weights, with forgetting |")
-  add("| `combo_pool` | Optimal prediction pool (Hall-Mitchell / Geweke-Amisano) |")
-  add("| `combo_bma` | Bayesian model averaging — reported as a diagnostic only |")
+  for (s in unlist(cfg$combination$schemes)) {
+    desc <- if (s %in% names(.scheme_desc)) .scheme_desc[[s]] else s
+    add(sprintf("| `combo_%s` | %s |", s, desc))
+  }
+  add("\nPerformance weights train on the **same loss the headline tables ",
+      "report** (the level view) and **exclude the COVID realization window** ",
+      "(2020Q1-2021Q2) from training — see README.md D20 for why.")
 
   # ---- 2-5. Performance, combinations, significance (need scoring) ----
   if (!scoring_ok) {
@@ -557,7 +614,7 @@ write_model_scorecard <- function(scores, spec, dm, diag, cfg,
     if (!is.null(p)) add("*See:* README.md ", p$refs, "\n") else add("\n")
   }
   add("### 6c. Combination schemes\n")
-  for (cs in c("combo_equal", "combo_logscore", "combo_pool", "combo_bma")) {
+  for (cs in paste0("combo_", unlist(cfg$combination$schemes))) {
     p <- .combo_profiles[[cs]]
     if (is.null(p)) next
     add("**`", cs, "`**  ")

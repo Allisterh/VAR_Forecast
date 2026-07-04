@@ -1,10 +1,11 @@
 ---
 title: "A Bayesian VAR Suite for Forecasting the Australian Economy"
-subtitle: "Block-exogenous small-open-economy BVARs, pooled density forecasts, 1–12 quarters ahead"
+subtitle: "What it forecasts, how it is judged, and what the evidence says — 1 to 12 quarters ahead"
 date: today
 format:
   html:
     toc: true
+    toc-depth: 2
     embed-resources: true
     fig-align: center
 execute:
@@ -15,117 +16,218 @@ execute:
 ```{r setup}
 suppressPackageStartupMessages({library(knitr)})
 tabdir <- "../output/tables"; figdir <- "../output/figures"
-rd <- function(f) read.csv(file.path(tabdir, f), stringsAsFactors = FALSE)
+rd <- function(f) if (file.exists(file.path(tabdir, f)))
+  read.csv(file.path(tabdir, f), stringsAsFactors = FALSE) else NULL
 spec    <- rd("transform_spec.csv")
 scores  <- rd("scores_by_horizon.csv")
+scores_ex <- rd("scores_by_horizon_excovid.csv")
 diag    <- rd("diagnostics.csv")
 wfinal  <- rd("final_weights.csv")
-dm      <- tryCatch(rd("dm_tests.csv"), error = function(e) NULL)
+dm      <- rd("dm_tests.csv")
+pitt    <- rd("pit_tests.csv")
+ep      <- rd("event_probabilities.csv")
 fc      <- read.csv("../output/forecasts/forecast_table.csv")
+cfc     <- if (file.exists("../output/forecasts/forecast_table_conditional.csv"))
+  read.csv("../output/forecasts/forecast_table_conditional.csv") else NULL
+
 # LEVEL-error view (the headline): cumulative level (cum, + q at h=1) for
 # growth-modelled targets; the rate level (q) for level-modelled targets.
 .dlog_tgt <- spec$variable[spec$transform == "dlog" & spec$target %in% c(TRUE, "TRUE")]
 .lev_meas <- function(v) if (v %in% .dlog_tgt) "cum" else "q"
 .tgt <- spec$variable[spec$target %in% c(TRUE, "TRUE")]
-lvl <- do.call(rbind, lapply(.tgt, function(v) {
+.lvl_view <- function(sc) do.call(rbind, lapply(.tgt, function(v) {
   if (v %in% .dlog_tgt)
-    rbind(scores[scores$variable == v & scores$measure == "cum", ],
-          scores[scores$variable == v & scores$measure == "q" & scores$h == 1, ])
-  else scores[scores$variable == v & scores$measure == "q", ]
+    rbind(sc[sc$variable == v & sc$measure == "cum", ],
+          sc[sc$variable == v & sc$measure == "q" & sc$h == 1, ])
+  else sc[sc$variable == v & sc$measure == "q", ]
 }))
+lvl <- .lvl_view(scores)
 dm_lvl <- if (!is.null(dm)) do.call(rbind, lapply(.tgt, function(v)
   dm[dm$variable == v & dm$measure == .lev_meas(v), ])) else NULL
-src <- yaml::read_yaml("../config/config.yml")$default$data$source
+cfgy <- yaml::read_yaml("../config/config.yml")$default
+src <- cfgy$data$source
+n_origins <- cfgy$evaluation$max_origins
+lbl <- setNames(spec$label, spec$variable)
 src_note <- if (identical(src, "synthetic")) {
-  "All results below are produced from the synthetic block-exogenous DGP, which exists so that the pipeline runs end-to-end offline; the *relative* model rankings are informative about the machinery, not about Australia. Re-run with `data.source: real` for substantive results."
+  "**This run used simulated (synthetic) data**, which exists so the pipeline can run offline; the results validate the machinery, not Australian dynamics. Re-run with `data.source: real` for substantive results."
 } else {
-  "Results are based on final-vintage published data; real-time vintages are not used, so revisions-sensitive comparisons (especially for GDP) should be read with care."
+  "Results are based on final-vintage published data; real-time vintages are not used, so revision-sensitive comparisons (especially GDP at short horizons) should be read with care — see the limitations section."
 }
+# computed exec-summary ingredients: best individual model per target (level
+# CRPS, mean over horizons), and the equal pool's rank
+best_by_target <- do.call(rbind, lapply(.tgt, function(v) {
+  d <- lvl[lvl$variable == v, ]
+  agg <- aggregate(crps ~ member, d, mean)
+  agg <- agg[order(agg$crps), ]
+  data.frame(variable = v, best = agg$member[1],
+             best_single = agg$member[!grepl("^combo_", agg$member)][1],
+             equal_rank = match("combo_equal", agg$member), n = nrow(agg))
+}))
 ```
 
-## 1. What this is
+::: {.callout-note title="If you read nothing else"}
+This project forecasts **GDP growth, trimmed-mean inflation, the unemployment
+rate and the cash rate** for Australia, 1–12 quarters ahead, using
+`r length(cfgy$suite)` Bayesian VAR models plus `r length(cfgy$benchmarks)`
+simple statistical benchmarks, all **combined into one pooled probability
+forecast**. Every model was tested by re-living the past: at each of
+`r n_origins` historical quarters it was re-estimated using only the data
+available at that date, made to forecast, and scored against what actually
+happened. The headline outputs are (i) the current fan-chart forecasts and
+event probabilities (§6), and (ii) the evidence on which models are reliable
+at which horizon (§5). `r src_note`
+:::
 
-This report documents a suite of Bayesian VARs for forecasting the key
-Australian macroeconomic aggregates 1–12 quarters ahead, combined into a single
-pooled **density** forecast. Australia is modelled as a **small open economy**:
-every VAR member partitions the system into a foreign block (world activity,
-commodity prices, the foreign policy rate) and a domestic block, and **block
-exogeneity** forbids domestic variables from feeding back into the foreign
-block (Cushman & Zha 1997; Zha 1999), at lags and contemporaneously. This is
-imposed in estimation (not just on impulse responses) and verified numerically
-(§6).
+## 1. What this is, in plain terms
 
-**Data source for this run:** `r src`. `r src_note`
+**The task.** Central-bank forecasting is not one prediction — it is a
+*distribution* over what might happen, at every horizon from next quarter to
+three years out. This pipeline produces those distributions ("density
+forecasts") for the four policy variables, together with honest evidence
+about how good they are.
 
-## 2. Data and transformations
+**Why a suite rather than one model.** No single model is best everywhere:
+tightly-disciplined models are robust three years out but sluggish next
+quarter; richly-parameterised models excel near-term and wander far-term;
+simple benchmarks are surprisingly hard to beat for inflation. So the
+production forecast is a **weighted pool** of all models' distributions, and
+most of this report is about *which models earn their place and where*.
 
-The `transform_spec` table is the single source of truth mapping each series to
-its transform, Minnesota own-lag prior mean (`delta`), block, and steady-state
-prior anchor (used by the Villani members).
+**Why "small open economy" is in the title.** Australia does not move world
+demand, world commodity prices, or the federal funds rate. Every VAR here
+partitions its variables into a **foreign block** (world activity, commodity
+prices, the US policy rate) and a **domestic block**, and imposes **block
+exogeneity**: foreign variables evolve as if Australia did not exist, while
+domestic variables respond to the world. Without this, a model happily
+"learns" from 30 years of data that Australian GDP drives world commodity
+prices — a spurious channel that quietly corrupts medium-term forecasts. One
+suite member (`small_unres`) deliberately *omits* the restriction so we can
+measure what it buys (§5.4).
+
+**The data.** `r nrow(spec)` quarterly series
+(`r sum(spec$block == "foreign")` foreign, `r sum(spec$block == "domestic")`
+domestic), Australian data from the RBA and ABS, the foreign block from FRED.
+Data source for this run: **`r src`**.
+
+## 2. How to read the numbers (a two-minute guide)
+
+Every model produces, for each variable and horizon, a full probability
+distribution. Three scores are used throughout, each answering a different
+question:
+
+| Score | Question it answers | Better is |
+|---|---|---|
+| **RMSE** | Was the *centre* of the forecast right? (root-mean-squared error of the point forecast) | lower |
+| **CRPS** | Was the *whole distribution* right? Roughly: the average distance between the forecast distribution and the outcome. It rewards being close *and* being honest about uncertainty. | lower |
+| **Log score** | How much probability did the model assign to what actually happened? It punishes overconfidence brutally: call an outcome "nearly impossible" and watch it occur, and your average never recovers. | higher |
+
+CRPS and the log score usually agree. They diverge in episodes like 2020,
+when realizations landed far in the tails — the log score is dominated by
+those few quarters, CRPS much less so. That is why both are reported, and
+why score tables come in a with-COVID and an ex-COVID variant.
+
+**Calibration and PITs.** A forecast distribution is *calibrated* if events
+it calls "20% likely" happen about 20% of the time. The tool for checking
+this is the **PIT** (probability integral transform): where in the forecast
+distribution did the outcome land, on a 0–1 scale? For a calibrated
+forecaster these values are uniform — the histogram is flat. A **hump** in
+the middle means intervals were too wide (overly cautious); a **U-shape**
+means too narrow (overconfident); a lopsided histogram means biased.
+
+**Two views of accuracy.** Growth variables can be scored on each quarter's
+outcome in isolation, or on where the accumulated *level* ends up. The
+headline here is the **level** view: "where is the price level / real GDP /
+the unemployment rate in two years?" — which is what policy cares about, and
+which exposes models whose small quarterly biases compound. A concrete
+example: a model that forecasts GDP growth of 0.7% every quarter when the
+truth averages 0.6% looks fine quarter by quarter (error 0.1pp) but is 1.2%
+too high on the GDP level after three years. The quarterly view is also
+reported (the scorecard's §3) because it answers the complementary question
+— "did the model get the near-term dynamics right?"
+
+**Horizons.** h = 1 is one quarter ahead; h = 12 is three years. Combination
+weights are estimated per horizon **bucket** — near (1–4), medium (5–8), far
+(9–12) — because the best model changes with horizon.
+
+**Members vs combinations.** Rows named `combo_*` are pools (weighted
+mixtures of all members' densities), not models. `combo_equal` weights all
+members equally; it is the famously hard-to-beat benchmark ("the forecast
+combination puzzle"). The performance-weighted schemes (`logscore`, `crps`,
+`pool`) adapt weights to the recent track record — trained on the same level
+loss the headline reports, with the COVID window excluded so a few extreme
+quarters cannot dictate the weights (README D20). `combo_bma` is a
+diagnostic, not a forecast: it shows which single model the data likes best.
+
+## 3. The models
 
 ```{r}
-kable(spec[, c("variable","label","block","transform","delta","ss_mean","ss_sd")],
-      digits = 2)
+kable(spec[, c("variable", "label", "block", "transform", "delta", "ss_mean", "ss_sd")],
+      digits = 2,
+      caption = "The variables. transform: how each series enters the models (dlog = quarterly log-change, i.e. growth; level = as is). delta: the prior's default persistence (1 = behaves like a random walk, 0 = mean-reverting). ss_mean/ss_sd: the steady-state member's prior on the long-run value (e.g. inflation anchored at 2.5% p.a. — the target midpoint).")
 ```
 
-Growth-type series enter as 100·Δlog with `delta = 0`; rates and 100·log
-levels enter with `delta = 1` plus sum-of-coefficients and
-dummy-initial-observation priors in selected members to discipline the I(1)
-behaviour at long horizons.
+Eight VARs and four univariate benchmarks. What distinguishes the VARs, in
+one line each (full profiles with their evaluation evidence:
+`model_scorecard.md` §6):
 
-## 3. The suite
+- **`small_minn`** — the workhorse: 8 variables, data-driven shrinkage,
+  long-run priors on the persistent series.
+- **`small_ss`** — the *steady-state* member: its long-run means are anchored
+  to economics (inflation 2.5%, NAIRU 4.5%, neutral cash rate 3.5%) instead of
+  sample averages; matters most at h ≥ 8, where every VAR forecast converges
+  to its long-run mean.
+- **`small_sv`** — *stochastic volatility*: the size of shocks changes over
+  time, so uncertainty bands widen and narrow with the environment; fat-tailed
+  errors absorb outliers.
+- **`small_loose_p5` / `small_tight`** — deliberately under- and over-shrunk
+  variants: the data speak more / less. They bracket the workhorse.
+- **`medium_minn` / `medium_conj`** — 13-variable systems (adding wages,
+  employment, consumption, terms of trade, the 10-year yield), with SV and
+  constant volatility respectively.
+- **`small_unres`** — the **control**: identical to the workhorse but
+  *without* block exogeneity. Its only job is to measure whether the
+  restriction helps (§5.4).
 
-Seven block-exogenous VARs spanning prior family (Minnesota vs steady-state),
-size (8-variable SOE core vs 13-variable medium), tightness (GLP-style
-marginal-likelihood-selected λ vs fixed tight/loose), lag length (2/4/5) and
-volatility (constant vs stochastic), plus four univariate anchors (random walk,
-AR(4), UCSV, unconditional mean). All members are estimated recursively at
-every forecast origin and produce predictive **draws** for every target
-variable and horizon, so they pool cleanly.
+Benchmarks: a random walk (`rw`), a Bayesian AR(4) (`ar4`), the
+Stock–Watson-style trend-plus-noise model with stochastic volatility
+(`ucsv`, the canonical inflation benchmark), and the unconditional mean
+(`ucmean`). They are cheap, genuinely different, and every VAR must beat
+them to justify its complexity.
 
-## 4. Evaluation design
+**The COVID quarters.** Three quarters of 2020 are 5–30σ events; untreated,
+they wreck coefficient and volatility estimates. Constant-volatility members
+down-weight those quarters' *likelihood contribution* with scale factors
+estimated recursively (Lenza–Primiceri); SV members absorb them through
+fat-tailed errors instead. Nothing is deleted: the observations still enter
+the forecast jump-off. See README D17 for the full design and its empirical
+validation.
 
-Pseudo-real-time expanding-window evaluation: at each origin *t* every member
-sees only data through *t* — including the data-driven tightness selection,
-which is re-run inside each origin. Combination weights at *t* use only scores
-whose realization was observable at *t* (`s + h ≤ t`). Both properties are
-enforced structurally and verified by automated tests (§6). Densities are
-scored with the log score and CRPS (`scoringRules`), points with RMSE, and
-calibration with PIT histograms, all by horizon, for quarterly and year-ended
-transforms.
+## 4. How the evaluation works
 
-## 4½. The COVID quarters
+The evaluation re-lives history. At each forecast origin *t* (there are
+`r n_origins`, ending one quarter before the sample ends), every member is
+re-estimated **using only data through t** — including the data-driven
+tightness selection and the COVID scale estimation, which are re-run inside
+each origin — and forecasts 1–12 quarters ahead. Forecasts are scored against
+what happened. Combination weights at *t* use only forecast scores whose
+outcome had been realized by *t*.
 
-Three quarters of 2020 are 5–30σ events. Following Lenza & Primiceri (2022),
-the constant-volatility members scale up the residual covariance in the
-configured COVID quarters — a free scale factor per quarter, estimated by
-marginal likelihood *recursively at each forecast origin*, with the excess
-volatility decaying geometrically afterwards — implemented as GLS row
-weighting, with the decaying scale path carried into the predictive shocks at
-COVID-era origins. The SV members instead use t-distributed errors (the
-Carriero–Clark–Marcellino–Mertens SV-t specification), so the spike is
-absorbed by the transitory scale mixture rather than the persistent
-volatility process. The Minnesota σ-calibration and the data-driven tightness
-selection run on the same weighted data (Hartwig 2024). COVID observations
-remain in the forecast jump-off — only their likelihood contribution is
-down-weighted. A `dummy` option (≈ dropping the quarters, Schorfheide–Song
-2024) is available for comparison; its known cost is unrealistically tight
-predictive bands at pandemic-era origins. See README.md D17.
-
-Because a handful of extreme realizations dominate mean log scores, the
-tables below are complemented by
-`output/tables/scores_by_horizon_excovid.csv`, which excludes the COVID
-realization quarters from scoring.
+"No look-ahead" is a correctness property here, not a slogan: an automated
+test corrupts all post-origin data (×10⁶) and requires every forecast draw to
+be bit-identical; a reproducibility test requires identical results from
+identical seeds; and block exogeneity is verified numerically on every fit.
+All are enforced as hard gates — the pipeline refuses to produce output if
+one fails (§7).
 
 ## 5. Results
 
-### 5.1 Level accuracy by horizon
+### 5.1 The headline: level accuracy by horizon
 
-The headline metric is the **level** forecast error: for GDP and inflation the
-cumulative level from the forecast origin (where real GDP and the price level
-land), and for unemployment and the cash rate the rate level itself. Mean level
-CRPS by horizon (lower is better), members vs pooled combinations — note level
-errors accumulate the whole path, so they grow with horizon:
+*How to read the figures: one panel per target; the y-axis is mean CRPS of
+the level forecast (lower = better); each line is a model (dashed = pooled
+combinations). Level errors accumulate the whole path, so curves rise with
+horizon mechanically — compare models at a horizon, not horizons with each
+other.*
 
 ```{r, results="asis"}
 for (v in unique(fc$variable)) {
@@ -138,41 +240,61 @@ for (v in unique(fc$variable)) {
 tab <- lvl[lvl$h %in% c(1, 4, 8, 12), ]
 tab <- reshape(tab[, c("member","variable","h","crps")],
                idvar = c("member","variable"), timevar = "h", direction = "wide")
-kable(tab[order(tab$variable, tab$crps.1), ], digits = 3,
-      caption = "Mean level CRPS at h = 1, 4, 8, 12 (cumulative level for GDP/inflation; rate level for unemployment/cash rate)")
+kable(tab[order(tab$variable, tab$crps.1), ], digits = 3, row.names = FALSE,
+      caption = "Mean level CRPS at h = 1, 4, 8, 12 (lower = better). For GDP and inflation this scores the cumulative level from the forecast origin; for unemployment and the cash rate, the rate itself.")
+```
+
+**Takeaways (computed from the table above):**
+
+```{r, results="asis"}
+for (i in seq_len(nrow(best_by_target))) {
+  b <- best_by_target[i, ]
+  cat(sprintf("- **%s**: best forecaster overall is `%s`; the best individual model is `%s`; the equal-weight pool ranks %d of %d.\n",
+              lbl[[b$variable]], b$best, b$best_single, b$equal_rank, b$n))
+}
 ```
 
 ```{r}
 lsx <- lvl[lvl$h %in% c(1, 4, 8, 12), ]
 lsx <- reshape(lsx[, c("member","variable","h","logdens")],
                idvar = c("member","variable"), timevar = "h", direction = "wide")
-kable(lsx[order(lsx$variable, -lsx$logdens.1), ], digits = 2,
-      caption = "Mean level log predictive density at h = 1, 4, 8, 12 (higher = better)")
+kable(lsx[order(lsx$variable, -lsx$logdens.1), ], digits = 2, row.names = FALSE,
+      caption = "Mean level log predictive density (higher = better). −Inf marks a model that assigned essentially zero probability to an outcome that occurred; pooled combinations never do — one argument for pooling.")
 ```
 
-The quarterly and year-ended *growth* scores are not shown here (they answer a
-narrower question); they remain in `output/tables/scores_by_horizon.csv`.
+### 5.2 The COVID caveat, quantified
 
-### 5.2 Significance
-
-Diebold–Mariano tests (Harvey-corrected) on the **level** CRPS differential
-against the AR(4) and random-walk benchmarks; stars (`***` 1%, `**` 5%, `*`
-10%). Level errors are high-variance, so the test has low power — pools beat
-the benchmarks on average more often than significantly.
+Mean scores over a window containing 2020 are dominated by a few quarters.
+The same tables excluding realizations in 2020Q1–2021Q2 are in
+`output/tables/scores_by_horizon_excovid.csv`; where a ranking reverses
+between the two, the ex-COVID one is usually the better guide to normal
+times.
 
 ```{r}
-if (!is.null(dm_lvl) && nrow(dm_lvl)) {
-  d1 <- dm_lvl[dm_lvl$h %in% c(4, 8, 12) & grepl("^combo_", dm_lvl$member), ]
-  kable(d1[order(d1$variable, d1$h), c("member","reference","variable","h",
-        "dm_crps","p_crps","sig_crps")], digits = 3, row.names = FALSE,
-        caption = "Level DM tests: combinations vs univariate benchmarks")
+if (!is.null(scores_ex)) {
+  lvx <- .lvl_view(scores_ex)
+  cmp <- merge(aggregate(crps ~ member, lvl[lvl$h <= 4, ], mean),
+               aggregate(crps ~ member, lvx[lvx$h <= 4, ], mean),
+               by = "member", suffixes = c("_all", "_excovid"))
+  cmp <- cmp[order(cmp$crps_excovid), ]
+  kable(cmp, digits = 3, row.names = FALSE,
+        caption = "Near-horizon (h 1-4) mean level CRPS, all origins vs excluding COVID realizations: how much of each model's score is one episode.")
 }
 ```
 
-### 5.3 Which models earn weight where
+### 5.3 Do the combinations earn their keep?
 
-Final-origin combination weights (optimal pool, shrunk toward equal), by
-variable and horizon bucket:
+Equal weights are the benchmark to beat, and the honest summary is that
+pooled forecasts buy **insurance and calibration** more than raw accuracy: a
+pool never takes a −∞ log score, never rides one model's failure mode, and
+its intervals are better calibrated — but at any single variable × horizon a
+well-chosen member usually noses ahead. Weight-training details (level loss,
+COVID window excluded, shrinkage toward equal) are in README D20 — the
+2026-07 audit showed that *without* those guards, log-score weights handed
+the far-horizon GDP bucket to the random walk on the strength of three 2020
+quarters.
+
+Final-origin weights of the optimal pool (averaged over targets):
 
 ```{r}
 wp <- aggregate(weight ~ member + bucket, data = wfinal[wfinal$scheme == "pool", ],
@@ -180,39 +302,66 @@ wp <- aggregate(weight ~ member + bucket, data = wfinal[wfinal$scheme == "pool",
 wp <- reshape(wp, idvar = "member", timevar = "bucket", direction = "wide")
 names(wp) <- sub("^weight\\.", "", names(wp))
 kable(wp[order(-wp$near), ], digits = 3, row.names = FALSE,
-      caption = "Optimal-pool weights averaged over target variables")
+      caption = "Optimal-pool weights by horizon bucket (final origin, averaged over targets). Equal weight would be 1/12 ≈ 0.083 per member.")
 ```
 
-The BMA diagnostic (predictive-likelihood weights, no shrinkage) shows which
-single member the data favour — by construction it concentrates and is **not**
-the recommended combination:
-
 ```{r}
-kable(aggregate(weight ~ member, data = wfinal[wfinal$scheme=="bma",], FUN = mean),
-      digits = 3, caption = "BMA diagnostic weights (averaged over variables/buckets)")
+bma <- aggregate(weight ~ member, data = wfinal[wfinal$scheme == "bma", ], FUN = mean)
+kable(bma[order(-bma$weight), ], digits = 3, row.names = FALSE,
+      caption = "BMA diagnostic (no shrinkage): which single model the data favour. By construction it concentrates; it is reported to be read, not used.")
 ```
 
 ```{r, results="asis"}
 fs <- list.files(figdir, pattern = "^weights_pool_.*near", full.names = TRUE)
-for (f in fs) cat(sprintf("![](%s){width=85%%}\n\n", f))
-```
-
-### 5.4 Calibration
-
-PIT histograms by member (h = 1 and h = 4): a calibrated density forecast has
-uniform PITs. Hump-shaped histograms indicate over-dispersion, U-shapes
-under-dispersion.
-
-```{r, results="asis"}
-for (f in c("pit_h1.png", "pit_h4.png")) {
-  p <- file.path(figdir, f)
-  if (file.exists(p)) cat(sprintf("![](%s){width=95%%}\n\n", p))
+if (length(fs)) {
+  cat("*Weight evolution over time (near bucket): a member earning weight is a member that has been forecasting well lately.*\n\n")
+  for (f in fs) cat(sprintf("![](%s){width=85%%}\n\n", f))
 }
 ```
 
-### 5.5 Current forecasts
+### 5.4 What does block exogeneity buy? (the control experiment)
 
-Fan charts from the optimal-pool combination at the final origin:
+`small_unres` is `small_minn` without the small-open-economy restriction.
+If the restriction helps, `small_minn` should win — especially at medium/far
+horizons where spurious domestic→foreign feedback compounds.
+
+```{r}
+d <- lvl[lvl$member %in% c("small_minn", "small_unres"), ]
+if (length(unique(d$member)) == 2) {
+  cmp <- aggregate(crps ~ member + variable, d[d$h %in% 5:12, ], mean)
+  cmp <- reshape(cmp, idvar = "variable", timevar = "member", direction = "wide")
+  names(cmp) <- sub("^crps\\.", "", names(cmp))
+  cmp$restriction_helps <- ifelse(cmp$small_minn < cmp$small_unres, "yes", "no")
+  kable(cmp, digits = 3, row.names = FALSE,
+        caption = "Mean level CRPS, h = 5-12: the block-exogenous workhorse vs its unrestricted twin. 'yes' = imposing the SOE structure improved the forecast.")
+} else {
+  cat("*small_unres not present in this run's scores.*")
+}
+```
+
+### 5.5 Statistical significance
+
+Diebold–Mariano tests ask whether a score difference is larger than its
+sampling noise (Harvey-corrected, autocorrelation-robust). Stars: `***` 1%,
+`**` 5%, `*` 10%. These losses are high-variance — dominated by a few
+episodes — so **absence of stars is weak evidence of nothing**; the tests
+have low power at long horizons.
+
+```{r}
+if (!is.null(dm_lvl) && nrow(dm_lvl)) {
+  d1 <- dm_lvl[dm_lvl$h %in% c(4, 8, 12) & grepl("^combo_", dm_lvl$member), ]
+  kable(d1[order(d1$variable, d1$h), c("member","reference","variable","h",
+        "dm_crps","p_crps","sig_crps")], digits = 3, row.names = FALSE,
+        caption = "Level-CRPS DM tests: pooled combinations vs the AR(4) and random-walk benchmarks. Negative statistic = the combination is more accurate.")
+}
+```
+
+## 6. The current forecasts
+
+Fan charts from the optimal-pool combination at the final origin. *How to
+read a fan chart: the line is history; the dashed line is the median
+forecast; the bands cover 30%/50%/70%/90% of the predictive distribution —
+the point is the width as much as the centre.*
 
 ```{r, results="asis"}
 fs <- list.files(figdir, pattern = "^fan_pool_", full.names = TRUE)
@@ -223,37 +372,115 @@ for (f in fs) cat(sprintf("![](%s){width=85%%}\n\n", f))
 cb <- fc[fc$member == "combo_pool", ]
 kable(cb[cb$h %in% c(1, 2, 4, 8, 12), c("variable","h","point","lo90","hi90")],
       digits = 2, row.names = FALSE,
-      caption = "Combined (optimal pool) forecasts: median and 90% interval")
+      caption = "Combined (optimal pool) forecasts: median and 90% interval. Units: quarterly % growth for GDP and inflation; % for unemployment and the cash rate.")
 ```
 
-## 6. Diagnostics
+### 6.1 Event probabilities
 
-Section-9 self-checks, enforced as a hard gate in the pipeline:
+Point forecasts hide the questions policy actually asks. From the pooled
+predictive distribution (probability-level pooling, which is exact for a
+linear pool):
+
+```{r, results="asis"}
+f <- file.path(figdir, "event_probabilities.png")
+if (file.exists(f)) cat(sprintf("![](%s){width=95%%}\n\n", f))
+```
 
 ```{r}
-kable(diag, digits = 4)
+if (!is.null(ep)) {
+  eps <- ep[ep$h %in% c(2, 4, 8, 12), c("event", "h", "prob")]
+  eps <- reshape(eps, idvar = "event", timevar = "h", direction = "wide")
+  names(eps) <- sub("^prob\\.", "h=", names(eps))
+  kable(eps, digits = 2, row.names = FALSE,
+        caption = "Event probabilities by horizon from the final pooled forecast (thresholds configurable in report.events).")
+}
 ```
 
-- **Block exogeneity binds:** max |posterior-mean coefficient of a domestic lag
-  inside a foreign equation| across all members and origins is
-  `r format(max(diag$block_exog_max), digits = 2)` (engines with structural
-  zeros report exactly 0).
+### 6.2 Scenario: conditioning on a cash-rate path
+
+```{r, results="asis"}
+if (!is.null(cfc)) {
+  cat(sprintf("The forecasts below condition on the configured **%s** path using Waggoner–Zha conditional simulation (the joint shock distribution is updated exactly, so other variables respond through both dynamics and shock correlations — README D21). Compare with the unconditional table above.\n\n", unique(cfc$conditioned_on)[1]))
+  kable(cfc[cfc$h %in% c(1, 2, 4, 8, 12), c("variable","h","point","lo90","hi90")],
+        digits = 2, row.names = FALSE,
+        caption = "Scenario forecasts (VAR members, equal-weight pool), conditional on the configured path.")
+} else {
+  cat("*No scenario configured. Set `report.conditional: {variable: cash_rate, path: [...]}` in `config/config.yml` to produce forecasts conditional on a policy-rate path (e.g. the market-implied path) — the standard central-bank conditioning exercise, implemented with Waggoner–Zha conditional simulation (README D21).*\n")
+}
+```
+
+## 7. Is any of this trustworthy? (calibration and diagnostics)
+
+### 7.1 Calibration
+
+PIT histograms (see §2 for how to read them), h = 1 and h = 4:
+
+```{r, results="asis"}
+for (f in c("pit_h1.png", "pit_h4.png")) {
+  p <- file.path(figdir, f)
+  if (file.exists(p)) cat(sprintf("![](%s){width=95%%}\n\n", p))
+}
+```
+
+At horizons beyond 1 the usual uniformity test is invalid (overlapping
+forecasts make PITs serially correlated), so the table below tests the first
+two moments with autocorrelation-robust standard errors: **location** (is the
+mean PIT 0.5? — bias) and **dispersion** (is the PIT variance 1/12? — too
+wide/too narrow), per horizon. Small p-values flag a problem.
+
+```{r}
+if (!is.null(pitt)) {
+  bad <- pitt[(!is.na(pitt$p_location) & pitt$p_location < 0.05) |
+              (!is.na(pitt$p_dispersion) & pitt$p_dispersion < 0.05), ]
+  bad <- bad[order(bad$member, bad$variable, bad$h), ]
+  if (nrow(bad)) {
+    kable(head(bad, 30), digits = 3, row.names = FALSE,
+          caption = "PIT moment-test failures at the 5% level (full table: output/tables/pit_tests.csv). mean_pit > 0.5 = forecasts too low on average; var_pit > 1/12 ≈ 0.083 = intervals too narrow.")
+  } else {
+    cat("No member fails the PIT moment tests at the 5% level.")
+  }
+}
+```
+
+### 7.2 Hard gates
+
+These are enforced — the pipeline stops if one fails:
+
+```{r}
+kable(diag, digits = 4,
+      caption = "Per-member diagnostics. block_exog_max: largest posterior-mean domestic coefficient in a foreign equation (should be ~0; small_unres is exempt by design — it is the control). ess_min: worst-case MCMC effective sample size. sanity: forecasts finite, non-explosive, converging to sensible long-run values.")
+```
+
+- **Block exogeneity binds** (max violation
+  `r format(if ("block_exog_exempt" %in% names(diag)) max(diag$block_exog_max[!diag$block_exog_exempt]) else max(diag$block_exog_max), digits = 2)`
+  across all restricted members and origins).
 - **No look-ahead:** corrupting all post-origin data leaves every forecast
   draw bit-identical.
-- **Reproducibility:** re-running an origin with the same master seed gives
-  identical draws.
+- **Reproducibility:** same seed ⇒ identical results, regardless of parallel
+  scheduling.
 
-## 7. Honest limitations
+## 8. Honest limitations and the roadmap
 
-- **Final-vintage data.** The evaluation is pseudo-real-time on (for real runs)
-  final data; genuine real-time vintages would change GDP-related rankings.
-- **Combination gains are modest by design.** Equal weights are hard to beat
-  (the combination puzzle); the payoff we target is *calibration and
-  robustness*, not large point-forecast gains, and the tables should be read
-  that way — where a single member beats the pools at a given horizon, the
-  honest summary is that the pool buys insurance, not accuracy.
-- **Conditional forecasts** use hard substitution, not Waggoner–Zha shock
-  redistribution; they are a convenience hook, not a policy-scenario tool.
-- **The synthetic DGP** is block-exogenous and Gaussian-with-outliers; it
-  validates machinery (recovery of the block structure, calibration under a
-  known truth), not Australian dynamics.
+- **Final-vintage data.** Every origin sees today's published history, not
+  what a forecaster saw at the time. Australian GDP and employment revisions
+  are material, so short-horizon GDP rankings especially should be read as
+  indicative. *Scoped extension:* a vintage database for GDP alone would
+  upgrade the h = 1–2 claims; no reliable key-free machine-readable vintage
+  source currently exists for the full panel.
+- **The world is proxied by the US.** World activity = US real GDP; Australia
+  trades mostly with Asia. This is documented and deliberate: as of
+  2026-07-04 no fresh machine-readable trade-weighted or China activity
+  series exists across the wired providers (OECD/G20 and FRED China GDP both
+  frozen at 2023Q3) — and adding a stale series would truncate the entire
+  balanced panel to its end-date. Commodity prices carry part of the China
+  signal. *Scoped extensions:* a manually-supplied trading-partner GDP file,
+  or ragged-edge estimation (README D22).
+- **Combination gains are modest by design** — that is the combination
+  puzzle, and the pool's payoff is insurance and calibration, not headline
+  accuracy. Where a single member beats the pools, the tables say so.
+- **The SV engine cannot do exact conditional scenarios** (its shocks are
+  non-Gaussian); scenario forecasts pool the Gaussian-engine members and are
+  labelled as such.
+- **Quarterly cadence only.** Monthly indicators (labour force, the monthly
+  CPI indicator) are not exploited for nowcasting; a mixed-frequency layer
+  feeding the h = 1 jump-off is the natural next extension after vintages.

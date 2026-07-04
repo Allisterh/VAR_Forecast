@@ -30,6 +30,18 @@
   as.integer(format(d, "%Y")) * 4L + (as.integer(format(d, "%m")) - 1L) %/% 3L
 }
 
+#' The COVID *realization-exclusion* window used consistently by (i) the
+#' ex-COVID score tables and (ii) combination-weight training when
+#' combination.exclude_covid_train is TRUE: the configured scaled quarters
+#' plus the rebound tail (6 quarters from the first scaled quarter, i.e.
+#' 2020Q1-2021Q2 with the default config). Returns Date(0) when no COVID
+#' config is present.
+covid_exclusion_dates <- function(cfg, n_quarters = 6) {
+  if (is.null(cfg$covid$quarters)) return(as.Date(character(0)))
+  seq(as.Date(min(unlist(cfg$covid$quarters))), by = "quarter",
+      length.out = n_quarters)
+}
+
 #' Which configured COVID quarters fall inside the estimation window.
 covid_quarters_in <- function(dates, cfg) {
   if (is.null(cfg$covid) || identical(cfg$covid$treatment, "none"))
@@ -78,6 +90,13 @@ covid_s_future <- function(dates, H, cq, scales, rho) {
 #' (i.e. up to the forecast origin), so the recursive no-look-ahead property
 #' holds. Returns list(cq, scales, rho); scales is empty when no COVID quarter
 #' is in sample or treatment is "none".
+#'
+#' NOTE the fixed default lambda = 0.2 in the marginal-likelihood objective:
+#' the (s, rho) hyperparameters are estimated under a common reference
+#' tightness rather than each member's own lambda. This is a deliberate
+#' hyperparameter-stage convention (the scale estimates are insensitive to
+#' lambda in this range, and a per-member search would multiply compute);
+#' see README.md D17.
 estimate_covid_scales <- function(y, dates, p, sigma, delta, cfg, lambda = 0.2) {
   cq <- covid_quarters_in(dates, cfg)
   if (!length(cq)) return(list(cq = cq, scales = numeric(0), rho = 0))

@@ -110,6 +110,13 @@ main <- function() {
   write.csv(combos$weights, "output/tables/weights_over_time.csv", row.names = FALSE)
   make_figures(allscores, combos$weights, final_fc, td, spec, cfg)
 
+  # ---- PIT moment tests, event probabilities, optional scenario ----
+  write.csv(pit_moment_tests(allscores), "output/tables/pit_tests.csv",
+            row.names = FALSE)
+  ep <- event_probabilities(final_fc, td, spec, cfg)
+  if (!is.null(ep)) plot_event_probs(ep)
+  conditional_forecasts(td, spec, cfg)
+
   # ---- optional Quarto HTML report (skipped if quarto unavailable) ----
   if (requireNamespace("quarto", quietly = TRUE) && nzchar(Sys.which("quarto"))) {
     tryCatch(quarto::quarto_render("reports/report.qmd", quiet = TRUE),
