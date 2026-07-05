@@ -122,6 +122,8 @@ list(
     pit_tab; event_probs; conditional_fc
     if (nzchar(Sys.which("quarto"))) {
       tryCatch({
+        # static technical reference (no run-output dependency) + narrative report
+        quarto::quarto_render("reports/methodology.qmd", quiet = TRUE)
         quarto::quarto_render("reports/report.qmd", quiet = TRUE)
         "reports/report.html"
       }, error = function(e) {

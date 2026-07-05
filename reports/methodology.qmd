@@ -1,0 +1,998 @@
+---
+title: "Methodology and Technical Reference"
+subtitle: "A block-exogenous Bayesian VAR suite for the Australian economy — functional forms, priors, estimation, forecasting, evaluation and combination"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    embed-resources: true
+    html-math-method: mathjax
+    fig-align: center
+execute:
+  echo: false
+  warning: false
+---
+
+This document is the rigorous companion to the narrative report
+(`report.html`) and the performance scorecard (`model_scorecard.md`). It
+states every functional form, prior, posterior, sampling step, forecasting
+recursion, scoring rule and combination formula used in the suite, with the
+config key and default value for each tunable quantity. Notation is
+consistent throughout and matches the source (`R/priors.R`, `R/engines.R`,
+`R/covid.R`, `R/forecast.R`, `R/evaluate.R`, `R/combine.R`,
+`R/benchmarks.R`). Cross-references of the form **Dk** point to the dated
+decision log in `README.md`.
+
+# The reduced-form VAR
+
+## Levels form
+
+Let $y_t \in \mathbb{R}^{M}$ be the vector of modelled variables at quarter
+$t$ (in the transformed units of §2). Every VAR member is a reduced-form
+Gaussian vector autoregression of order $p$,
+
+$$
+y_t \;=\; c \;+\; \sum_{l=1}^{p} A_l\, y_{t-l} \;+\; \varepsilon_t,
+\qquad \varepsilon_t \sim \mathcal{N}(0,\Sigma),
+\qquad t = p+1,\dots,T,
+$$ {#eq-var}
+
+with intercept $c\in\mathbb{R}^M$, coefficient matrices
+$A_l\in\mathbb{R}^{M\times M}$, and a full $M\times M$ innovation covariance
+$\Sigma$. Lag length $p$ is a per-member choice (`suite[].lags`, values
+$2,4,5$).
+
+## Regression (stacked) form
+
+Collect the $T-p$ usable observations. With the regressor row
+$x_t = (1,\,y_{t-1}^\top,\dots,y_{t-p}^\top)^\top \in \mathbb{R}^{K}$,
+$K = 1+Mp$, stack
+
+$$
+\underbrace{Y}_{(T-p)\times M} \;=\; \underbrace{X}_{(T-p)\times K}\,
+\underbrace{B}_{K\times M} \;+\; E,
+\qquad
+B = \begin{pmatrix} c^\top \\ A_1^\top \\ \vdots \\ A_p^\top \end{pmatrix},
+\qquad
+\operatorname{vec}(E)\sim\mathcal N\!\big(0,\ \Sigma\otimes I\big).
+$$ {#eq-regform}
+
+Row $k$ of $B$ with $k = 1 + (l-1)M + j$ (for $k>1$) holds the loadings of
+**lag $l$ of variable $j$** across the $M$ equations; column $i$ is
+equation $i$. This indexing (`coef_index()` in `R/priors.R`) is used
+throughout. `build_XY()` constructs $(Y,X)$.
+
+## Companion form and stability
+
+Stacking $\tilde y_t = (y_t^\top,\dots,y_{t-p+1}^\top)^\top$ gives the
+$Mp\times Mp$ companion matrix
+
+$$
+\mathbf{A} =
+\begin{pmatrix}
+A_1 & A_2 & \cdots & A_p \\
+I_M & 0 & \cdots & 0 \\
+& \ddots & & \vdots \\
+& & I_M & 0
+\end{pmatrix}.
+$$
+
+The system is covariance-stationary iff $\rho(\mathbf A)\equiv\max_i
+|\lambda_i(\mathbf A)| < 1$. `max_eig_mod()` computes $\rho(\mathbf A)$; it
+drives the stability diagnostic (§11), the explosive-draw rejection in the
+steady-state sampler (§6.4), and the stationarity truncation of the AR
+benchmark (§8).
+
+## The small-open-economy partition and block exogeneity {#sec-blockexog}
+
+Partition $y_t = (f_t^\top, d_t^\top)^\top$ into a **foreign block**
+$f_t\in\mathbb R^{n_f}$ (world activity, commodity prices, the foreign
+policy rate) and a **domestic block** $d_t\in\mathbb R^{n_d}$,
+$M=n_f+n_d$. Columns are ordered foreign-first
+(`build_transform_spec()` sorts on `block`), so each lag matrix has the
+partition
+
+$$
+A_l =
+\begin{pmatrix}
+A_l^{ff} & A_l^{fd} \\[2pt]
+A_l^{df} & A_l^{dd}
+\end{pmatrix}.
+$$
+
+**Block exogeneity** is the SOE identifying restriction
+(Cushman–Zha 1997; Zha 1999): the foreign block does not respond to the
+domestic block, i.e.
+
+$$
+A_l^{fd} = 0 \quad \text{for all } l=1,\dots,p .
+$$ {#eq-blockexog}
+
+Economically, Australia is a price-taker on world activity and commodity
+prices; without @eq-blockexog the model would infer, from 30 years of
+comovement, spurious channels in which Australian variables move world
+demand — corrupting the medium-horizon dynamics that the iterated forecast
+(§7) propagates. RBA RDP 2013-06 shows imposing it materially raises the
+measured role of foreign shocks. Three engines impose it three ways
+(§§4–6); one member (`small_unres`, **D19**) deliberately omits it as a
+control. The restriction constrains the **lag dynamics** only; the
+steady-state means remain coupled through $\Sigma$ (§6.4, **D3**).
+
+The posterior-mean violation
+$\max_{l}\, \| A_l^{fd}\|_{\max}$ is logged per fit
+(`block_exog_metric()`) and gated below $10^{-2}$ (§11); structural-zero
+engines report exactly $0$.
+
+# Data, transforms and target measures {#sec-data}
+
+## Series and transforms
+
+The `transform_spec` table (`config.yml → variables`, assembled by
+`build_transform_spec()`) is the single source of truth. Each raw series
+$r_{v,t}$ is mapped to model units by one of three transforms
+(`apply_transform()`):
+
+$$
+y_{v,t} =
+\begin{cases}
+100\,\big(\log r_{v,t} - \log r_{v,t-1}\big) & \text{transform } \texttt{dlog}\ \text{(quarterly \% growth)}\\[4pt]
+100\,\log r_{v,t} & \text{transform } \texttt{loglevel}\\[4pt]
+r_{v,t} & \text{transform } \texttt{level}.
+\end{cases}
+$$
+
+Growth-type series (GDP, CPI, wages, employment, consumption, both
+foreign activity measures, commodity prices) use `dlog`; interest and
+unemployment rates use `level`; the real TWI and terms of trade use
+`loglevel`. The panel is balanced to the common finite sample
+(`transform_data()`); interior gaps error rather than impute.
+
+## Minnesota own-lag prior centre $\delta$
+
+Each variable carries a prior persistence $\delta_v$ (`variables[].delta`)
+that centres its own first-lag coefficient (§3):
+
+$$
+\delta_v =
+\begin{cases}
+0 & \text{mean-reverting growth rates (}\texttt{dlog}\text{)}\\
+1 & \text{persistent levels (}\texttt{level},\ \texttt{loglevel}\text{)} .
+\end{cases}
+$$
+
+This is the textbook Litterman (1986) assignment: a random-walk prior for
+$I(1)$ level variables, a white-noise prior for stationary growth rates
+(**D2**).
+
+## Target measures scored {#sec-measures}
+
+For the four policy targets (GDP growth, trimmed-mean inflation,
+unemployment, cash rate) three transforms of the predictive path are
+scored (`score_member()`). Writing $y_{v,t+h}$ for the model-unit outcome
+$h$ quarters after origin $t$:
+
+$$
+\begin{aligned}
+\textbf{quarterly (q):}\quad & y_{v,t+h}, \\
+\textbf{year-ended (ye):}\quad & \textstyle\sum_{j=0}^{3} y_{v,t+h-j}
+&&\text{(dlog targets only; the RBA headline concept)}, \\
+\textbf{cumulative level (cum):}\quad & \textstyle\sum_{j=1}^{h} y_{v,t+j}
+&&\text{(dlog targets, } h\ge 2\text{; }=100\,\Delta\log\text{level over the horizon).}
+\end{aligned}
+$$
+
+For `dlog` variables the **cum** measure is the headline: it is where the
+price level / real GDP actually lands $h$ quarters out, and it compounds any
+persistent bias in the quarterly forecast. For `level` variables (rates)
+the level *is* the quarterly measure, so **q** serves as the level view.
+The year-ended measure splices realized history when $h<4$; when it is
+reconstructed from draws the same 4-quarter convention is used
+(`.ye_from_q()`), preserving within-path dependence.
+
+# The Minnesota prior family {#sec-minn}
+
+Two representations are used, distinguished by whether the prior variance can
+differ across equations.
+
+## Independent-prior Minnesota moments {#sec-minn-indep}
+
+For the Gibbs, steady-state and SV engines, the prior on each coefficient is
+independent Gaussian with mean $b_0$ and standard deviation $s_0$
+(`minnesota_prior()`), both $K\times M$. The intercept:
+
+$$
+b_0[1,i] = 0, \qquad s_0[1,i] = \theta_c\,\sigma_i,\qquad \theta_c = 10 .
+$$
+
+For the coefficient in equation $i$ on lag $l$ of variable $j$
+(row $k=1+(l-1)M+j$):
+
+$$
+b_0[k,i] =
+\begin{cases}\delta_i & i=j,\ l=1\\ 0 & \text{otherwise}\end{cases}
+\qquad
+s_0[k,i] = \lambda \cdot
+\underbrace{\big(\mathbb 1_{i=j} + \kappa\,\mathbb 1_{i\ne j}\big)}_{\text{own vs cross}}
+\cdot \frac{\sigma_i}{\sigma_j}\cdot l^{-\alpha}.
+$$ {#eq-minn}
+
+The four Minnesota levers:
+
+| Symbol | Role | Value | Source |
+|---|---|---|---|
+| $\lambda$ | overall tightness (own-lag sd at lag 1) | member-specific; `auto`, $0.05$, $0.4$ | §5, `prior.lambda` |
+| $\kappa$ | cross-variable shrinkage | $0.5$ | `cross` |
+| $\alpha$ | lag decay exponent ($s_0\propto l^{-\alpha}$) | $1$ | `lag_decay` |
+| $\theta_c$ | intercept looseness (multiple of $\sigma_i$) | $10$ | `intercept_scale` |
+
+The scale factors $\sigma_i$ are residual standard deviations from a
+univariate AR($p$) fit to each series (`ar_sigmas()`), so shrinkage is in
+units of each equation's own noise; the ratio $\sigma_i/\sigma_j$ makes the
+prior invariant to the arbitrary scaling of the regressors. Under the COVID
+treatment (§7) the same GLS row weights are applied when computing
+$\sigma_i$, closing the outlier-contamination channel of the scale
+calibration (Hartwig 2024, **D17**).
+
+**Block exogeneity in the prior.** For a foreign equation $i$ ($f_t$
+component) and any domestic variable $j$, @eq-minn is overridden by
+
+$$
+b_0[k,i] = 0, \qquad s_0[k,i] = \underline{s} = 10^{-4}
+\quad(\texttt{mcmc.block\_exog\_prior\_sd}),
+$$ {#eq-blockexog-prior}
+
+a near-dogmatic spike at zero: prior mean *and* variance are ~0, so the
+posterior for those coefficients is pinned at $0$ to numerical precision.
+This asymmetric (equation-specific) prior variance is representable only
+because the prior is independent across equations — which is exactly why
+block exogeneity requires the Gibbs/SV engines and cannot be done with the
+conjugate Kronecker prior below (**D3**).
+
+## Conjugate Normal–inverse-Wishart prior {#sec-conj-prior}
+
+For the fast closed-form engines (`conj_br`, and the GLP marginal likelihood
+of §5), the prior is the natural conjugate matric-variate NIW
+(`conjugate_prior()`):
+
+$$
+B\mid\Sigma \sim \mathcal{MN}_{K\times M}\!\big(B_0,\ \Omega_0\otimes\Sigma\big),
+\qquad
+\Sigma \sim \mathcal{IW}(S_0,\nu_0),
+$$ {#eq-conj-prior}
+
+i.e. $\operatorname{vec}(B)\mid\Sigma \sim \mathcal
+N\!\big(\operatorname{vec}(B_0),\ \Sigma\otimes\Omega_0\big)$ with a
+**diagonal** among-row scale $\Omega_0$:
+
+$$
+B_0[1+j,\,i]=\delta_i\ (\text{own first lag}),\quad
+\Omega_0[1,1]=\theta_c^2,\quad
+\Omega_0[k,k]=\Big(\frac{\lambda}{\sigma_j\, l^{\alpha}}\Big)^{2}.
+$$
+
+The prior on $\Sigma$ is centred at the diagonal AR-residual covariance:
+$\nu_0 = M+2$ and $S_0 = \operatorname{diag}(\sigma^2)\,(\nu_0-M-1)$, so
+$\mathbb E[\Sigma]=\operatorname{diag}(\sigma_1^2,\dots,\sigma_M^2)$.
+
+The Kronecker structure $\Omega_0\otimes\Sigma$ forces the *same* row
+covariance $\Omega_0$ on every equation — cross-shrinkage is effectively
+fixed and block exogeneity cannot be imposed. That is the modelling reason
+the suite carries both prior families.
+
+# Long-run (dummy-observation) priors {#sec-soc-dio}
+
+At $h=8\text{–}12$ an iterated forecast converges to the model's
+unconditional mean, which a plain Minnesota prior pins down poorly for
+$I(1)$ levels. Two artificial-observation priors discipline this, appended
+as extra rows to $(Y,X)$ before estimation (`soc_dio_dummies()`, applied to
+the members with `prior.soc/dio: true`). Let $\bar y$ be the mean of the
+first $p$ observations.
+
+**Sum-of-coefficients (Doan–Litterman–Sims).** One dummy row per level
+variable $j$ (those with $\delta_j=1$), with tightness $\mu$
+(`prior.soc_mu`, default $1$):
+
+$$
+y^\ast_j = \frac{\bar y_j}{\mu}\,e_j,\qquad
+x^\ast_j = \frac{\bar y_j}{\mu}\,\big(0,\underbrace{e_j,\dots,e_j}_{p\text{ lag blocks}}\big),
+$$
+
+which shrinks the sum of own lag coefficients toward one (a unit root / no
+deterministic drift) as $\mu\to 0$.
+
+**Dummy-initial-observation (Sims–Zha).** A single row asserting that the
+system starts at $\bar y$ and stays there, with tightness
+$\delta_{\text{dio}}$ (`prior.dio_delta`, default $1$):
+
+$$
+y^\ast = \frac{\bar y}{\delta_{\text{dio}}},\qquad
+x^\ast = \frac{1}{\delta_{\text{dio}}}\big(1,\ \bar y^\top,\dots,\bar y^\top\big),
+$$
+
+a single co-persistence / common-trend prior favouring the presence of unit
+roots without over-differencing. Both are applied only to level variables;
+applying them to growth rates would bias the well-estimated short-run
+dynamics (**D5**). For the block-recursive engine the dummies are split by
+block and the domestic dummy rows carry the contemporaneous-foreign columns
+(§4.2).
+
+# Data-driven shrinkage: GLP marginal-likelihood selection {#sec-glp}
+
+Rather than hand-set $\lambda$, the members with `prior.lambda: auto` inherit
+an overall tightness chosen by maximising the closed-form conjugate
+log marginal likelihood (Giannone–Lenza–Primiceri 2015, **D4**). For the
+conjugate NIW model the marginal likelihood is analytic
+(`log_marginal_likelihood()`). With posterior quantities
+
+$$
+P_1 = \Omega_0^{-1} + X^\top X,\quad
+B_1 = P_1^{-1}\big(\Omega_0^{-1}B_0 + X^\top Y\big),\quad
+S_1 = S_0 + Y^\top Y + B_0^\top\Omega_0^{-1}B_0 - B_1^\top P_1 B_1,\quad
+\nu_1 = \nu_0 + T,
+$$ {#eq-post-conj}
+
+the log marginal likelihood is
+
+$$
+\log p(Y\mid\lambda) =
+-\frac{MT}{2}\log\pi
++\log\Gamma_M\!\Big(\tfrac{\nu_1}{2}\Big)
+-\log\Gamma_M\!\Big(\tfrac{\nu_0}{2}\Big)
++\frac{\nu_0}{2}\log|S_0|
+-\frac{\nu_1}{2}\log|S_1|
++\frac{M}{2}\Big(\!-\log|P_1| - \log|\Omega_0|\Big),
+$$ {#eq-logml}
+
+where $\log\Gamma_M$ is the multivariate log-gamma (`lmvgamma()`) and
+$\log|P_1|$ is read off its Cholesky factor for stability. `select_lambda()`
+evaluates @eq-logml on the grid $\{0.05,0.1,0.15,0.2,0.3,0.4,0.6\}$
+(`glp.lambda_grid`) and returns the maximiser. Crucially this is **re-run at
+every forecast origin inside the recursive loop** on the data up to that
+origin, so the selection carries no look-ahead. Two members keep fixed
+$\lambda$ ($0.05$ tight, $0.4$ loose) for suite diversity.
+
+# Estimation engines {#sec-engines}
+
+Four engines share the interface `fit(y, member, spec, cfg) → posterior`
+and a `simulate_paths()` method (§7). Each returns draws
+$\{(B^{(d)},\Sigma^{(d)})\}_{d=1}^{N}$ (or the SV analogue) and MCMC
+diagnostics.
+
+## Conjugate NIW posterior and sampler {#sec-conj-post}
+
+Under @eq-conj-prior the posterior is conjugate:
+
+$$
+\Sigma\mid Y \sim \mathcal{IW}(S_1,\nu_1),\qquad
+B\mid\Sigma,Y \sim \mathcal{MN}\!\big(B_1,\ \Omega_1\otimes\Sigma\big),\quad
+\Omega_1 = P_1^{-1},
+$$
+
+with $B_1,S_1,\nu_1$ from @eq-post-conj. `sample_conjugate()` draws
+i.i.d. from this in closed form. Writing $P_1 = R^\top R$ (upper Cholesky
+$R$), each draw is
+
+$$
+\Sigma^{(d)} \sim \mathcal{IW}(S_1,\nu_1),\qquad
+B^{(d)} = B_1 + R^{-1} Z\, \operatorname{chol}(\Sigma^{(d)}),
+\quad Z_{K\times M}\ \text{i.i.d. } \mathcal N(0,1),
+$$
+
+so that $\operatorname{Var}\!\big(\operatorname{vec}(B^{(d)})\big) =
+\Sigma^{(d)}\otimes (R^{-1}R^{-\top}) = \Sigma^{(d)}\otimes\Omega_1$ as
+required.
+
+**Inverse-Wishart draws** (`riwish()`) use the Bartlett decomposition: to
+draw $\Sigma\sim\mathcal{IW}(S,\nu)$, factor $S^{-1}=LL^\top$, form the lower
+triangular $\mathbf T$ with $\mathbf T_{ii}=\sqrt{\chi^2_{\nu-i+1}}$ and
+$\mathbf T_{ij}\sim\mathcal N(0,1)$ for $i>j$, set
+$W = L\,\mathbf T\mathbf T^\top L^\top \sim \mathcal W(S^{-1},\nu)$, and
+return $W^{-1}$.
+
+## Block-recursive conjugate engine `conj_br` {#sec-conjbr}
+
+Block exogeneity is imposed here **structurally** by the recursive
+factorisation $p(f_t,d_t) = p(f_t)\,p(d_t\mid f_t)$ (the RBNZ
+Bloor–Matheson approach), so the fast conjugate prior can be used despite
+its inability to represent asymmetric shrinkage.
+
+1. **Foreign marginal VAR.** Estimate $f_t = c_f + \sum_l A_l^{ff} f_{t-l}
+   + \varepsilon^f_t$ as a self-contained $n_f$-variable conjugate VAR on
+   foreign lags only (§6.1), with its own SOC/DIO dummies. This makes
+   $A_l^{fd}=0$ exact.
+2. **Domestic conditional regression.** Regress
+   $$
+   d_t = c_d + \sum_{l=1}^p B_l^{d}\, y_{t-l} + G^\top f_t + \varepsilon^d_t
+   $$
+   on the intercept, **all** lags, and the **contemporaneous** foreign
+   vector $f_t$. The conjugate prior here uses lag variances
+   $(\lambda/(\sigma_j l))^2$ and loose contemporaneous-foreign variances
+   $\sigma_j^{-2}$; the DIO dummy row is extended with contemporaneous-foreign
+   entries $\bar f/\delta_{\text{dio}}$.
+
+For forecasting and conditioning, the two blocks are recombined into the
+joint reduced form (`.conj_br_joint()`): with $G$ the
+contemporaneous-foreign coefficient rows,
+
+$$
+u^f = \varepsilon^f,\quad u^d = G^\top\varepsilon^f + \varepsilon^d,
+\qquad
+\Sigma_{\text{joint}} =
+\begin{pmatrix}
+\Sigma_f & \Sigma_f G\\
+G^\top\Sigma_f & G^\top\Sigma_f G + \Sigma_d
+\end{pmatrix},
+$$
+
+and the joint $B$ routes the foreign equations through $G$ into the domestic
+rows. This reconstruction is unit-tested against the two-stage simulation.
+
+## Independent Normal–inverse-Wishart Gibbs engine `gibbs` {#sec-gibbs}
+
+The workhorse (§ D3 requires it for block exogeneity). Prior:
+$\operatorname{vec}(B)\sim\mathcal N(b_0, V_0)$ with the **diagonal** $V_0$
+from the independent Minnesota moments (@eq-minn, so $V_0 =
+\operatorname{diag}(\operatorname{vec}(s_0)^2)$ and the block-exog spike
+@eq-blockexog-prior), and $\Sigma\sim\mathcal{IW}(S_0,\nu_0)$,
+$\nu_0=M+2$. The two full conditionals are Gibbs-sampled
+(`fit_gibbs`, `draw_beta_given_sigma`):
+
+$$
+\begin{aligned}
+\text{(i)}\quad
+\operatorname{vec}(B)\mid\Sigma,Y &\sim \mathcal N\big(\bar b,\ P^{-1}\big),\\
+P &= \Sigma^{-1}\otimes X^\top X + V_0^{-1},\qquad
+\bar b = P^{-1}\big(\operatorname{vec}(X^\top Y\,\Sigma^{-1}) + V_0^{-1} b_0\big),\\[4pt]
+\text{(ii)}\quad
+\Sigma\mid B,Y &\sim \mathcal{IW}\big(S_0 + E^\top E,\ \nu_0 + T\big),\qquad
+E = Y - XB.
+\end{aligned}
+$$ {#eq-gibbs}
+
+Step (i) draws $\operatorname{vec}(B) = \bar b + \operatorname{chol}(P)^{-1}z$,
+$z\sim\mathcal N(0,I)$. The sampler runs `mcmc.nburn` $=300$ burn-in and
+`mcmc.ndraw` $=1500$ retained iterations. The **unrestricted control**
+`small_unres` (**D19**) is this engine with the block-exog spike removed
+(the prior treats every variable as domestic); it is exempt from the
+block-exog gate by construction.
+
+## Steady-state (Villani) engine `ss` {#sec-ss}
+
+The steady-state reparametrisation (Villani 2009) writes the VAR around its
+unconditional mean $\psi = \mathbb E[y_t]$,
+
+$$
+y_t - \psi = \sum_{l=1}^p A_l\,(y_{t-l}-\psi) + \varepsilon_t,
+$$ {#eq-ss}
+
+so that informative priors sit **directly on the long-run levels**:
+$\psi\sim\mathcal N(\psi_0,\operatorname{diag}(\text{sd}^2))$ with anchors
+(`variables[].ss_mean/ss_sd`, **D5**) — trimmed-mean inflation $2.5\%$ p.a.
+(target midpoint), GDP growth $2.8\%$, NAIRU $4.5\%$, neutral cash rate
+$3.5\%$, US potential growth, and loose sample-mean anchors for the TWI/ToT.
+The lag block $A=(A_1,\dots,A_p)$ carries the independent Minnesota prior
+@eq-minn (no intercept), including the block-exog spike.
+
+A three-block Gibbs sampler (`fit_ss`) cycles:
+
+1. **$A\mid\psi,\Sigma$** — on the demeaned data $z_t = y_t-\psi$, the
+   linear step @eq-gibbs(i) with no intercept. Explosive draws are rejected
+   ($\rho(\mathbf A)\ge 1$) up to five times, else kept and flagged via the
+   stability share.
+2. **$\psi\mid A,\Sigma$** — write $U = I_M - \sum_{l=1}^p A_l$ and
+   $w_t = y_t - \sum_l A_l y_{t-l}$, so that $w_t = U\psi + \varepsilon_t$
+   (with error scale $s_t^2\Sigma$ under the COVID weighting $\omega_t=1/s_t$
+   of §7). The Gaussian–Gaussian conjugate update gives
+   $\psi\mid\cdot \sim \mathcal N(\bar\psi, P_\psi^{-1})$ with
+   $$
+   P_\psi = \operatorname{diag}\!\big(\text{sd}^{-2}\big)
+   + \Big(\textstyle\sum_t \omega_t^2\Big)\,U^\top\Sigma^{-1}U,
+   \qquad
+   \bar\psi = P_\psi^{-1}\Big(\operatorname{diag}(\text{sd}^{-2})\psi_0
+   + U^\top\Sigma^{-1}\textstyle\sum_t \omega_t^2 w_t\Big).
+   $$ {#eq-psi}
+3. **$\Sigma\mid A,\psi$** — inverse-Wishart on the (weighted) demeaned
+   residuals as in @eq-gibbs(ii).
+
+**Scope of block exogeneity (D3).** @eq-psi uses the *full*
+$M\times M$ precision $\Sigma^{-1}$, so the joint draw of $\psi$ couples the
+foreign and domestic means through the contemporaneous error correlations.
+This is the correct Villani full conditional — a foreign-only update would be
+wrong — so block exogeneity here constrains the **lag dynamics**
+($A^{fd}=0$), not the steady-state means. The domestic forecast therefore
+inherits foreign steady states informed by the joint residual covariance, by
+design.
+
+## Stochastic-volatility engine `sv` {#sec-sv}
+
+Time-varying volatility (Clark 2011; Carriero–Clark–Marcellino 2019) is
+estimated equation-by-equation on a **triangular** factorisation of the
+reduced form, ordered foreign-first. Equation $i$ is
+
+$$
+y_{i,t} = x_{i,t}^\top \beta_i + \exp\!\big(h_{i,t}/2\big)\,\eta_{i,t},
+\qquad
+h_{i,t} = \mu_i + \phi_i\,(h_{i,t-1}-\mu_i) + \sigma_{\eta,i}\, u_{i,t},
+\quad u_{i,t}\sim\mathcal N(0,1),
+$$ {#eq-sv}
+
+where $x_{i,t}$ stacks the intercept, the **allowed** lags, and the
+**contemporaneous** values $y_{j,t}$ for $j<i$ (`sv_equation_design()`). For
+a foreign equation the allowed regressors are foreign lags and foreign
+contemporaneous variables only — dropping the domestic columns entirely, so
+block exogeneity is **exact**. Because the per-equation priors are
+independent, the joint posterior factorises across equations *exactly*
+(not an approximation), which is what keeps the recursive loop feasible.
+
+The conditional innovation $\eta_{i,t}$ is Student-$t$ with
+$\nu_i$ degrees of freedom for COVID robustness (**D17**), represented as a
+scale mixture $\eta_{i,t} = \sqrt{\tau_{i,t}}\,z_{i,t}$,
+$z\sim\mathcal N(0,1)$, with `stochvol`'s auxiliary weights $\tau$
+(mean $1$, so $\exp(h_{i,t})$ remains the conditional variance). Priors
+(`stochvol::specify_priors`):
+$\mu\sim\mathcal N(0,10)$, $\phi\sim 2\,\text{Beta}(20,1.5)-1$,
+$\sigma_\eta^2\sim\text{Gamma}(0.5,0.5)$, $\nu\sim\text{Exp}(0.1)$ shifted
+past $2$. The coefficient prior is Minnesota-shaped: intercept sd
+$10\sigma_i$, lag sd $\lambda(\mathbb 1_{\text{own}}+0.5\,\mathbb
+1_{\text{cross}})(\sigma_i/\sigma_j)/l$, contemporaneous-loading sd
+$\sigma_i/\sigma_j$.
+
+Each Gibbs sweep (`fit_sv`):
+
+$$
+\begin{aligned}
+\beta_i\mid h_i,\tau_i &: \text{ weighted ridge regression with weights }
+w_{i,t}=\exp(-h_{i,t}/2)/\sqrt{\tau_{i,t}} \text{ and prior precision } s_0^{-2},\\
+(h_i,\mu_i,\phi_i,\sigma_{\eta,i},\nu_i,\tau_i)\mid \text{resid}_i &:
+\text{ one }\texttt{stochvol::svsample\_fast\_cpp}\text{ update on }
+\text{resid}_i = y_i - X_i\beta_i.
+\end{aligned}
+$$
+
+**Adaptive thinning (D22).** At short samples an equation's own-lag chain
+can mix slowly ($\beta$ and the volatility path are strongly coupled). If the
+own-lag effective sample size falls below the convergence gate ($50$), that
+equation is re-run with $3\times$ then $9\times$ thinning until it clears —
+the same philosophy as the UCSV Monte-Carlo-precision gate (§8); the final
+ESS is reported honestly.
+
+# COVID-period treatment {#sec-covid}
+
+Three quarters of 2020 are $5$–$30\sigma$ events that, untreated, wreck
+constant-volatility coefficient estimates, contaminate the Minnesota scale
+calibration, and (in persistent-SV models) get misread as a lasting
+volatility regime (Lenza–Primiceri 2022; Hartwig 2024; CCMM 2024). The suite
+applies three coordinated mechanisms (`config.covid`, **D17**).
+
+## Lenza–Primiceri volatility scaling (constant-volatility engines)
+
+Augment @eq-var with a deterministic volatility path $s_t$,
+
+$$
+y_t = c + \sum_{l=1}^p A_l y_{t-l} + s_t\,\varepsilon_t,\qquad
+s_t = \begin{cases}
+\bar s_q & t\in\text{COVID quarter } q\ (2020\text{Q1–Q3})\\[2pt]
+1 + (\bar s_{\text{last}}-1)\,\rho^{\,j} & t = T_0+j\ \text{after the last COVID quarter}\\[2pt]
+1 & \text{otherwise}
+\end{cases}
+$$ {#eq-lp}
+
+(`covid_s_path()`). Dividing each observation equation by $s_t$ restores a
+homoskedastic VAR — equivalently, GLS row weights $\omega_t = 1/s_t$ on
+$(Y,X)$ — so **every** constant-volatility engine, including the conjugate
+Kronecker one, applies unchanged. The per-quarter scales
+$\bar s_q\in\{1,2,4,8,16,32,64\}$ (`covid.scale_grid`) and the decay
+$\rho\in\{0,0.4,0.8\}$ (`covid.decay_grid`) are estimated by maximising the
+conjugate log marginal likelihood of the rescaled data *including the
+Jacobian* of the rescaling (`.lp_logml`),
+
+$$
+\log p_{\text{LP}}(Y\mid \bar s,\rho) =
+\log p\big(Y^{\omega}\mid \text{conjugate model}\big) \;-\; M\sum_t \log s_t,
+$$ {#eq-lp-ml}
+
+where $Y^\omega, X^\omega$ are the weighted data, by coordinate descent on
+the grids. This is done **at every forecast origin** on data up to the origin
+(`estimate_covid_scales()`), so it is fully recursive and look-ahead-free.
+The Minnesota $\sigma_i$ and the GLP $\lambda$ (§5) use the same weighted
+data, closing Hartwig's contamination channel. On real Australian data the
+recursive estimates stabilise at $(\bar s)=(1,8,4)$ for 2020Q1–Q3.
+
+At COVID-era origins the predictive shocks carry the decaying future scale
+path $s^{\text{fut}}_{1:H}$ (`covid_s_future()`), so the density bands widen
+appropriately rather than snapping back to pre-COVID width — the LP
+density-forecast payoff.
+
+## SV-$t$ errors (SV engine)
+
+The SV engine does **not** use the row weights; instead the Student-$t$
+innovations of @eq-sv absorb the outliers through the transitory scale
+mixture $\tau$ rather than the persistent log-volatility process — the CCMM
+SV-$t$ specification, which performs within $0$–$2\%$ of their preferred
+SVO-$t$ (`covid.sv_t_errors: true`).
+
+## `dummy` alternative and robustness
+
+Setting `covid.treatment: dummy` sends $s_t\to 10^3$ at the COVID quarters,
+equivalent to dropping those rows from the likelihood (Schorfheide–Song
+2024), with $s^{\text{fut}}=1$; its documented cost is predictive bands stuck
+at pre-COVID widths. COVID observations always remain in the forecast
+jump-off (only the likelihood contribution is treated). A robustness script
+(`scripts/covid_robustness_2021q3.R`) re-runs the full OOS with 2021Q3 added
+to the treated set; the effect is within noise (CRPS ratios $0.99$–$1.01$),
+so the 2020Q1–Q3 window stands (**D22**).
+
+# Forecasting: iterated density simulation {#sec-forecast}
+
+All members produce **iterated** multi-step density forecasts
+(Marcellino–Stock–Watson 2006, **D7**): the one-step model is rolled forward,
+integrating over both parameter uncertainty (the posterior draws) and shock
+uncertainty (fresh innovations each step). For each retained draw
+$(B^{(d)},\Sigma^{(d)})$ and each horizon $s=1,\dots,H$ ($H=12$),
+`.iterate_path()` computes
+
+$$
+y^{(d)}_{t+s} = c^{(d)} + \sum_{l=1}^p A^{(d)}_l\, y^{(d)}_{t+s-l}
++ s^{\text{fut}}_s\,\operatorname{chol}(\Sigma^{(d)})^\top z_{s},
+\qquad z_s\sim\mathcal N(0,I_M),
+$$ {#eq-iterate}
+
+with $y_{t+s-l}$ replaced by realized data for $s-l\le 0$. This yields a
+predictive sample of `mcmc.forecast_draws` $=1000$ paths per member per
+origin; posterior draws are recycled across the full $N$ (not just the first
+$1000$) so the density integrates over the whole posterior. For the SV engine
+the innovation is $\exp(h^{(d)}_{i,t+s}/2)\,\eta$ with $h$ propagated by
+@eq-sv and $\eta$ a **variance-standardised** Student-$t$ draw,
+$\eta = t_{\nu}\sqrt{(\nu-2)/\nu}$, so that $\exp(h)$ is exactly the
+conditional variance (the standardisation is essential — an unstandardised
+$t_\nu$ would inflate every SV predictive variance by $\nu/(\nu-2)$;
+independently Monte-Carlo-verified against `stochvol`). For the steady-state
+engine the recursion runs in demeaned units $z^{(d)}_{t+s}$ and adds
+$\psi^{(d)}$ back.
+
+Predictive quantiles for fan charts are empirical quantiles of the path
+array (`fan_quantiles()`); the year-ended and cumulative measures of §2.3 are
+formed from the joint paths so their within-horizon dependence is exact.
+
+# Conditional forecasting: Waggoner–Zha and forecast profiles {#sec-cond}
+
+The suite conditions the density forecast on imposed future paths — the
+central-bank scenario exercise (**D21/D23**). Different variables may be
+pinned over different horizons: the **global block over the entire projection
+window**, but domestic nowcast variables (CPI, unemployment) for **one
+quarter only**. Each imposed (variable, quarter) pair is one linear
+constraint, so ragged profiles are handled by the same machinery.
+
+## The exact Gaussian conditional (Waggoner–Zha 1999)
+
+Stack the future shocks $u=(u_1^\top,\dots,u_H^\top)^\top$ with
+$u\sim\mathcal N(0, C)$, $C = \operatorname{blockdiag}(s_1^2\Sigma,\dots,
+s_H^2\Sigma)$. The moving-average representation of @eq-var gives the future
+path as a linear function of $u$ with weights $\Psi_k$ satisfying
+
+$$
+\Psi_0 = I_M,\qquad
+\Psi_k = \sum_{l=1}^{\min(k,p)} A_l\,\Psi_{k-l}
+\quad(\texttt{.ma\_weights}),
+$$
+
+so that $y_{t+s} = m_{t+s} + \sum_{j=1}^{s}\Psi_{s-j}\,u_j$, where $m$ is the
+deterministic (zero-shock) path (`.deterministic_path()`). A restriction that
+variable $c_j$ equals a target value at horizon $s$ is the linear constraint
+
+$$
+\underbrace{\big[\Psi_{s-j}\big]_{c_j,\cdot}}_{\text{row of }R}\ \text{summed over } j\le s
+\;=\; r,
+\qquad r = \text{target} - m_{s,c_j},
+$$
+
+i.e. $R\,u = r$ with one row per imposed cell (`.cond_matrix()` builds the
+$H\times M$ constraint grid; NA entries are free). The **exact conditional
+draw** of the shocks given $Ru=r$ is the Gaussian conditioning formula
+
+$$
+u^\ast = u + C R^\top \big(R C R^\top\big)^{-1}\,(r - R u),
+\qquad u\sim\mathcal N(0,C),
+$$ {#eq-wz}
+
+after which the path is iterated forward with $u^\ast$
+(`.wz_conditional_path()`). Because @eq-wz is applied **per posterior draw**,
+parameter uncertainty is retained; only the shocks are constrained.
+Non-conditioned variables respond to the imposed path through both the lag
+dynamics ($\Psi$) and the contemporaneous error covariance ($C$), and the
+un-pinned quarters of a partially-pinned variable revert to model-driven
+forecasts *consistent with* the pin. Unit tests confirm the pinned path binds
+exactly and the conditional mean/variance match the closed-form Gaussian
+update.
+
+The Gaussian engines (`gibbs`, `ss`, `conj_br`) use @eq-wz exactly
+(`conj_br` via the joint reduced form of §4.2). The SV engine has
+non-Gaussian, time-varying shock variances, so no exact Gaussian conditional
+exists; it falls back to hard substitution (overwrite the conditioned
+variable each step, logged) — the D15 approximation.
+
+## Forecast profiles
+
+Profiles are supplied as data (`report.conditional.profiles_file`, a CSV of
+`variable, date|h, value`; `read_forecast_profiles()`), inline, or in the
+legacy single-variable form. Rows outside the forecast window are dropped
+with a warning so a file survives the panel end moving; profiles for
+variables a member does not model are dropped for that member. The scenario
+pools the VAR members with equal weights and writes
+`forecast_table_conditional.csv` with an `imposed` flag per cell. The bundled
+`data/example_forecast_profiles.csv` pins the full 2026Q2–2028Q2 path of the
+foreign block and a one-quarter nowcast for CPI and unemployment.
+
+# Forecast evaluation {#sec-eval}
+
+## Pseudo-real-time recursive design
+
+The evaluation re-lives history (`run_oos_member`, **D11**). Origins are the
+last `evaluation.max_origins` $=60$ quarters ending at $T-1$, starting at
+$\lceil 0.45\,T\rceil$ (`first_origin_frac`), i.e. ~2011 onward. At each
+origin $t$ **every member is re-estimated on $y_{1:t}$ only** — including the
+GLP $\lambda$ selection and the COVID scale estimation — and forecasts
+$h=1,\dots,12$. This is expanding-window by default (`evaluation.window`;
+rolling optional). Final-vintage data is used (real-time vintages are not
+reliably key-free; the caveat is stated loudly, **D11**).
+
+**No look-ahead is a correctness property, not a convention.** The single
+slice point is `harness_forecast()`; an automated test corrupts all
+post-origin data by $\times 10^6$ and requires bit-identical forecast draws
+(`test_no_lookahead`, one member per engine, including an origin whose horizon
+spans a COVID quarter). Combination weights at $t$ use only scores whose
+realization was observable by $t$ ($s+h\le t$, §10).
+
+## Point and density scores
+
+For a predictive sample $\{x^{(d)}\}_{d=1}^{N}$ and realization $y$
+(`safe_crps`, `safe_logs` via `scoringRules`):
+
+$$
+\begin{aligned}
+\textbf{RMSE:}\quad & \sqrt{\tfrac1n\textstyle\sum (\hat y - y)^2},\quad
+\hat y = \tfrac1N\textstyle\sum_d x^{(d)}\ \text{(predictive mean)},\\[4pt]
+\textbf{CRPS:}\quad & \operatorname{CRPS}(F,y)=\mathbb E_F|X-y|-\tfrac12\mathbb E_F|X-X'|
+\ \approx\ \tfrac1N\textstyle\sum_d|x^{(d)}-y| - \tfrac{1}{2N^2}\textstyle\sum_{d,e}|x^{(d)}-x^{(e)}|,\\[4pt]
+\textbf{log score:}\quad & \log \hat p(y),\quad \hat p\ \text{a Gaussian-kernel density of the sample}.
+\end{aligned}
+$$
+
+CRPS is reported alongside the log score because the two diverge on
+outlier-heavy windows: the log score is dominated by a few tail realizations
+(e.g. 2020), CRPS much less so. Both are computed for the **q**, **ye** and
+**cum** measures of §2.3, by horizon; the level view (**cum** for growth
+targets, **q** for rates) is the headline (`summarise_scores`,
+`.level_view`). A COVID-excluded score table is also written (the exclusion
+window $=$ 2020Q1–2021Q2, `covid_exclusion_dates()`).
+
+## Calibration: PIT and moment tests
+
+The probability integral transform is $\text{PIT} = \hat F(y) =
+\tfrac1N\sum_d \mathbb 1\{x^{(d)}\le y\}$; a calibrated forecaster has uniform
+PITs. At $h=1$ a $\chi^2$ test on quintile bins is used (`check_calibration`).
+For $h>1$ the overlapping forecast windows make PITs serially correlated, so
+the $\chi^2$ test is invalid; instead the first two PIT moments are tested
+(Knüppel 2015, **D22**, `pit_moment_tests`) with a Newey–West($h-1$)
+variance:
+
+$$
+\text{location: } \mathbb E[\text{PIT}]=\tfrac12
+\quad(\text{bias}),
+\qquad
+\text{dispersion: } \mathbb E\big[(\text{PIT}-\tfrac12)^2\big]=\tfrac1{12}
+\quad(\text{too wide / too narrow}).
+$$
+
+## Diebold–Mariano tests
+
+For two members' losses $L^1_t, L^2_t$ (squared error or CRPS) on aligned
+origins, the loss differential $d_t = L^1_t - L^2_t$ is tested for zero mean
+(`dm_test`) with the Harvey small-sample correction and a Newey–West variance
+truncated at the forecast-overlap lag $L$:
+
+$$
+\text{DM} = k\cdot\frac{\bar d}{\sqrt{\hat V/n}},\qquad
+\hat V = \gamma_0 + 2\sum_{l=1}^{L}\Big(1-\frac{l}{L+1}\Big)\gamma_l,\qquad
+k = \sqrt{\frac{n+1-2h+h(h-1)/n}{n}},
+$$
+
+with $\gamma_l$ the sample autocovariances of $d_t$, $L=h-1$ for the
+quarterly/level measures and $L=h+3$ for the overlapping year-ended sums, and
+$p$-values from $t_{n-1}$. Members are compared against the AR(4) and
+random-walk benchmarks (`dm_vs_reference`). These losses are high-variance, so
+the tests have low power at long horizons — absence of significance is weak
+evidence.
+
+# Density combination {#sec-combine}
+
+The production forecast is a **linear pool** of the member densities. For
+weights $w=(w_1,\dots,w_M)$ on the simplex, the pooled predictive density,
+log score, PIT and CRPS are
+
+$$
+\hat p_{\text{pool}}(y) = \sum_m w_m\,\hat p_m(y),
+\qquad
+\log \hat p_{\text{pool}}(y) = \operatorname{logsumexp}_m\big(\log w_m + \log\hat p_m(y)\big),
+$$
+
+$$
+\text{PIT}_{\text{pool}} = \sum_m w_m\,\text{PIT}_m
+\ \ (\text{exact mixture CDF}),
+\qquad
+\text{CRPS}_{\text{pool}} = \operatorname{CRPS}\big(\text{mixture sample},\,y\big),
+$$
+
+where the mixture sample is drawn by allocating $N_{\text{mix}}$ draws across
+members via a multinomial with probabilities $w$ (`combine_all`), and
+$\operatorname{logsumexp}$ is the stable log-sum-exp (`logsumexp()`).
+
+## Weight schemes {#sec-schemes}
+
+Weights are estimated **per target variable and per horizon bucket**
+(near $1$–$4$, medium $5$–$8$, far $9$–$12$; `horizon_buckets`) and only from
+training scores realized by the origin ($s+h\le t$; `.train_scores`). Let
+$\ell_m$ and $\bar C_m$ be the discounted training log-score sum and
+discounted mean CRPS with forgetting $\gamma=0.95$ (`forgetting`), age
+$= t-(s+h)$:
+
+$$
+\ell_m = \sum_{s} \gamma^{\,t-(s+h)}\log\hat p_m,\qquad
+\bar C_m = \frac{\sum_s \gamma^{\,t-(s+h)}\,\text{CRPS}_{m,s}}{\sum_s \gamma^{\,t-(s+h)}}.
+$$
+
+The five schemes (`combination.schemes`):
+
+| Scheme | Weight rule (before shrinkage) | Notes |
+|---|---|---|
+| `equal` | $w_m = 1/M$ | the combination-puzzle benchmark; recommended default |
+| `logscore` | $w_m \propto \exp(\ell_m)$ (softmax) | Jore–Mitchell–Vahey; tail-sensitive |
+| `crps` | $w_m \propto 1/\bar C_m$ | outlier-robust performance weighting (**D20**) |
+| `pool` | $\arg\max_w \sum_s \gamma^{\text{age}}\log\!\sum_m w_m \hat p_{m,s}$ | optimal prediction pool (Hall–Mitchell / Geweke–Amisano) |
+| `bma` | $w_m \propto \exp\!\big(\sum_s \log\hat p_{m,s}\big)$ at the bucket's near-edge horizon | **diagnostic only**; concentrates on one model |
+
+The **optimal pool** (`optimal_pool_weights`) maximises the discounted
+historical *pooled* log score over the simplex, softmax-parametrised
+($w = \operatorname{softmax}(0,\theta)$) and solved by BFGS — unlike BMA it
+does not degenerate to a single model ("all models are false but useful").
+
+All schemes except BMA are **shrunk toward equal weights** (`.shrink`, the
+combination-puzzle guard):
+
+$$
+w \leftarrow \frac{\kappa}{M} + (1-\kappa)\,w,\qquad \kappa = 0.3\ (\texttt{shrink\_kappa}),
+$$
+
+and equal weights are used until `min_train_origins` $=8$ training origins
+exist.
+
+## Training loss and the COVID window (D20)
+
+Two robustness choices, both traced to the 2026-07 audit finding that
+untreated log-score weights handed the far-horizon GDP bucket to the random
+walk on the strength of a few 2020 quarters:
+
+- `train_measure: level` — performance weights train on the **same loss the
+  headline reports**: the cumulative-level (`cum`) scores for growth-modelled
+  targets (`q` at $h=1$, where they coincide) and the rate level for
+  level-modelled targets. Training on the quarterly measure while reporting
+  the level measure is a mismatch that let a member good at one but poor at
+  the other earn weight.
+- `exclude_covid_train: true` — score observations *realized* in the COVID
+  exclusion window (2020Q1–2021Q2) are dropped from weight training. This is
+  the weight-estimation analogue of the D17 principle: treat the outlier's
+  likelihood contribution, keep everything else (the pre-specified-dates
+  principle).
+
+# Event probabilities {#sec-events}
+
+Policy questions are answered directly from the pooled predictive
+distribution (`event_probabilities`, **D22**). For a linear pool the event
+probability is exactly the weighted average of member event probabilities,
+and member probabilities are computed from each member's **joint path draws**
+(so the year-ended sums preserve within-path dependence):
+
+$$
+\Pr(\text{event}) = \sum_m w_m\,\Pr\nolimits_m(\text{event}),
+\qquad
+\Pr\nolimits_m(\text{event}) = \tfrac1N\textstyle\sum_d \mathbb 1\{\text{event holds on path } d\}.
+$$
+
+The configured events (`report.events`) are P(year-ended GDP growth $<0$),
+P(year-ended trimmed-mean inflation in $[2,3]\%$), and P(unemployment rises
+$\ge 0.75$pp from the jump-off), reported by horizon.
+
+# Benchmarks {#sec-bench}
+
+Four univariate benchmarks are both pool members and the bar every VAR must
+clear (`fit_benchmark`, **D8/D9**):
+
+- **`rw`** — random walk on the transformed series, Gaussian increments with
+  the (COVID-weighted) historical change sd.
+- **`ar4`** — Bayesian AR(4) per variable, conjugate normal–inverse-gamma
+  with Minnesota lag shrinkage (sd $0.5/l$) and the own-lag prior mean
+  $\delta_v$ (**D22**); iterated density forecasts with a stationarity
+  truncation ($\min|\text{root}|>1$) on the coefficient draws.
+- **`ucsv`** — Stock–Watson unobserved-components stochastic volatility per
+  variable: local-level trend $\tau_t$ plus transitory noise, both with
+  time-varying variances, estimated by FFBS + `stochvol`. Three deliberate
+  deviations force robustness at COVID-sized endpoint outliers (**D9**):
+  $t$-distributed transitory errors, a **constant** trend-shock variance with
+  a conjugate inverse-gamma update (removing the trend-vol pile-up), and a
+  tight vol-of-vol prior. Convergence is gated on the Monte-Carlo standard
+  error of the trend endpoint relative to the one-step predictive sd, with an
+  adaptive triple-thinning retry — the forecast-relevant quantity, not raw
+  parameter ESS.
+- **`ucmean`** — Gaussian density centred on the expanding-sample mean with
+  the sample variance (COVID-weighted).
+
+# Diagnostics and correctness gates {#sec-diagnostics}
+
+The pipeline refuses to emit results unless every §9-style property passes
+(`assert_diagnostics`, a hard gate):
+
+| Property | Check | Threshold |
+|---|---|---|
+| Block exogeneity | $\max_l\|A_l^{fd}\|_{\max}$ per fit | $<10^{-2}$ (exempt: `small_unres`) |
+| MCMC convergence | own-lag effective sample size | $>50$ (or NA when `coda` absent) |
+| Stability | companion eigenvalue share $\rho(\mathbf A)<1.05$ | reported |
+| Forecast sanity | finite, non-explosive tails, median in a data-scaled band | pass |
+| No look-ahead | corrupt post-origin data $\Rightarrow$ identical draws | bit-identical |
+| Reproducibility | same master seed $\Rightarrow$ identical draws | bit-identical |
+| Calibration | PIT uniform / moment tests | reported |
+
+Reproducibility rests on a single master seed (`master_seed`) from which
+every stochastic task (member $\times$ origin, final forecasts, mixture
+resampling) derives its own seed by hashing (`derive_seed`), so results are
+independent of the parallel scheduling (**D13**). The recursive OOS is
+disk-cached keyed by a hash of the estimation-relevant config *and* the
+estimation R sources (`config_hash`), so combination experiments cost seconds
+(**D14**).
+
+# Reference: symbols and config keys {#sec-symbols}
+
+| Symbol | Meaning | Default / config |
+|---|---|---|
+| $M,\ p,\ K$ | variables, lags, regressors $=1+Mp$ | `suite[].lags` |
+| $n_f,\ n_d$ | foreign / domestic block sizes | `variables[].block` |
+| $\lambda$ | Minnesota overall tightness | `prior.lambda` (`auto`/0.05/0.4) |
+| $\kappa$ | cross-variable shrinkage | $0.5$ (`cross`) |
+| $\alpha$ | lag-decay exponent | $1$ (`lag_decay`) |
+| $\theta_c$ | intercept looseness | $10$ (`intercept_scale`) |
+| $\underline s$ | block-exog prior sd | $10^{-4}$ (`mcmc.block_exog_prior_sd`) |
+| $\delta_v$ | own-lag prior mean | `variables[].delta` |
+| $\sigma_i$ | AR-residual scale | `ar_sigmas()` |
+| $\nu_0,\ S_0$ | IW prior dof / scale | $M+2$, $\operatorname{diag}(\sigma^2)(\nu_0-M-1)$ |
+| $\psi_0,\ \text{sd}$ | steady-state anchor | `variables[].ss_mean/ss_sd` |
+| $\bar s_q,\ \rho$ | COVID scales / decay | `covid.scale_grid`, `covid.decay_grid` |
+| $\gamma$ | forgetting factor | $0.95$ (`forgetting`) |
+| $\kappa$ (combo) | shrink toward equal | $0.3$ (`shrink_kappa`) |
+| $N$ | posterior / predictive draws | `mcmc.ndraw`=1500, `forecast_draws`=1000 |
+| $H$ | max horizon | $12$ (`horizons`) |
+
+# References {#sec-refs}
+
+Bańbura, Giannone & Reichlin (2010), *Large Bayesian VARs*, J. Applied
+Econometrics. — Bloor & Matheson (2008, 2010), block-recursive SOE VARs,
+RBNZ. — Carriero, Clark & Marcellino (2019), *Large VARs with SV*, J.
+Econometrics. — CCMM (2024), outlier-robust SV, REStat. — Clark (2011), SV
+and density forecasts. — Cushman & Zha (1997), *Identifying monetary policy
+in a small open economy*, J. Monetary Economics. — Doan, Litterman & Sims
+(1984). — Geweke & Amisano (2011), *Optimal prediction pools*, J.
+Econometrics. — Giannone, Lenza & Primiceri (2015), *Prior selection for
+vector autoregressions*, REStat. — Gneiting & Raftery (2007), *Strictly
+proper scoring rules*, JASA. — Hall & Mitchell (2007), *Combining density
+forecasts*, IJF. — Hartwig (2024), COVID and Minnesota scale calibration,
+SNDE. — Harvey, Leybourne & Newbold (1997), DM small-sample correction. —
+Jore, Mitchell & Vahey (2010), *Combining forecast densities*, J. Applied
+Econometrics. — Knüppel (2015), *Evaluating the calibration of multi-step
+density forecasts*, J. Business & Economic Statistics. — Lenza & Primiceri
+(2022), *How to estimate a VAR after March 2020*, J. Applied Econometrics. —
+Litterman (1986), *Forecasting with Bayesian VARs*, JBES. — Marcellino,
+Stock & Watson (2006), *Iterated vs direct multi-step forecasts*, J.
+Econometrics. — Schorfheide & Song (2024), pandemic-period VARs. — Villani
+(2009), *Steady-state priors for VARs*, J. Applied Econometrics. — Waggoner &
+Zha (1999), *Conditional forecasts in dynamic multivariate models*, REStat. —
+Zha (1999), *Block recursion and structural VARs*, J. Econometrics.

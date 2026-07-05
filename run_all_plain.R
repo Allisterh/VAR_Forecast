@@ -117,10 +117,12 @@ main <- function() {
   if (!is.null(ep)) plot_event_probs(ep)
   conditional_forecasts(td, spec, cfg)
 
-  # ---- optional Quarto HTML report (skipped if quarto unavailable) ----
+  # ---- optional Quarto HTML reports (skipped if quarto unavailable) ----
   if (requireNamespace("quarto", quietly = TRUE) && nzchar(Sys.which("quarto"))) {
-    tryCatch(quarto::quarto_render("reports/report.qmd", quiet = TRUE),
-             error = function(e) log_warn("report render failed: {conditionMessage(e)}"))
+    tryCatch({
+      quarto::quarto_render("reports/methodology.qmd", quiet = TRUE)  # static technical ref
+      quarto::quarto_render("reports/report.qmd", quiet = TRUE)
+    }, error = function(e) log_warn("report render failed: {conditionMessage(e)}"))
   } else {
     log_warn("quarto R package / CLI unavailable; skipping HTML report")
   }

@@ -10,11 +10,21 @@ a foreign block (world activity, commodity prices, foreign policy rate) and a
 domestic block, and block exogeneity — domestic variables never feed back into
 the foreign block — is imposed in estimation and verified numerically.
 
-This is the single reference document for the project. The per-model
-specifications and live forecast-performance tables are in the auto-generated
-[`reports/model_scorecard.md`](reports/model_scorecard.md) (regenerated on every
-run); the rendered narrative report with figures is
-[`reports/report.html`](reports/report.html).
+This README is the project's decision log and run guide. The other documents,
+by audience:
+
+- [`reports/methodology.qmd`](reports/methodology.qmd) → `methodology.html` —
+  the **technical reference**: every functional form, prior, posterior,
+  sampling step, forecasting recursion, scoring rule and combination formula,
+  with full equations and the config key for each quantity. Read this for
+  *how the models work*.
+- [`reports/report.qmd`](reports/report.qmd) → `report.html` — the **narrative
+  report**: a reader-first walkthrough of what the suite forecasts, how it is
+  judged, and what the current evidence says (fan charts, PIT calibration,
+  event probabilities). Read this for *what the results are*.
+- [`reports/model_scorecard.md`](reports/model_scorecard.md) — the
+  auto-generated **scorecard**: per-model specifications and live
+  forecast-performance league tables, regenerated on every run.
 
 ## Contents
 
@@ -92,7 +102,8 @@ diagnostics green) is archived as `reports/report_real_data.html`.
 | Where | What |
 |---|---|
 | `reports/model_scorecard.md` (+ `.pdf`) | **the scorecard**: spec table for every model; forecast performance on the **level** error (CRPS / log score / RMSE by variable and horizon — cumulative level for GDP/inflation, the rate level for unemployment/cash rate) **and on quarterly growth** (each target's single-quarter outcome); and a **per-model profile** (spec, role, strengths/failure modes, and where each model actually ranks on both views) for every member |
-| `reports/report.html` | rendered Quarto report (methodology + results narrative, fan charts, PIT calibration) |
+| `reports/methodology.html` | rendered technical reference: all functional forms, priors, estimation/forecasting/scoring/combination equations |
+| `reports/report.html` | rendered narrative report (results walkthrough, fan charts, PIT calibration, event probabilities) |
 | `output/tables/` | scores by horizon (log score, CRPS, RMSE), DM tests, PIT moment tests (`pit_tests.csv`), event probabilities (`event_probabilities.csv`), diagnostics, transform spec, combination weights |
 | `output/figures/` | fan charts, PIT calibration histograms, event-probability plot, weight-evolution plots, CRPS-by-horizon plots |
 | `output/forecasts/` | combined + per-member point/interval forecast table; conditional-scenario table (`forecast_table_conditional.csv`) when `report.conditional` is set |

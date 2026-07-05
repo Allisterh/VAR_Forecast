@@ -2229,6 +2229,19 @@ vertical-align: -.125em;
 <h2 class="anchored" data-anchor-id="what-this-is-in-plain-terms">1. What this is, in plain terms</h2>
 <p><strong>The task.</strong> Central-bank forecasting is not one prediction — it is a <em>distribution</em> over what might happen, at every horizon from next quarter to three years out. This pipeline produces those distributions (“density forecasts”) for the four policy variables, together with honest evidence about how good they are.</p>
 <p><strong>Why a suite rather than one model.</strong> No single model is best everywhere: tightly-disciplined models are robust three years out but sluggish next quarter; richly-parameterised models excel near-term and wander far-term; simple benchmarks are surprisingly hard to beat for inflation. So the production forecast is a <strong>weighted pool</strong> of all models’ distributions, and most of this report is about <em>which models earn their place and where</em>.</p>
+<div class="callout callout-style-default callout-tip callout-titled" title="Where the equations live">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Tip</span>Where the equations live
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>This report explains <em>what the suite does and what it finds</em>, in words. For the full mathematical specification — every prior, posterior, Gibbs step, forecasting recursion, scoring rule and combination formula, with equations and config keys — see the companion <strong>technical reference</strong> (<code>methodology.html</code>).</p>
+</div>
+</div>
 <p><strong>Why “small open economy” is in the title.</strong> Australia does not move world demand, world commodity prices, or the federal funds rate. Every VAR here partitions its variables into a <strong>foreign block</strong> (world activity, commodity prices, the US policy rate) and a <strong>domestic block</strong>, and imposes <strong>block exogeneity</strong>: foreign variables evolve as if Australia did not exist, while domestic variables respond to the world. Without this, a model happily “learns” from 30 years of data that Australian GDP drives world commodity prices — a spurious channel that quietly corrupts medium-term forecasts. One suite member (<code>small_unres</code>) deliberately <em>omits</em> the restriction so we can measure what it buys (§5.4).</p>
 <p><strong>The data.</strong> 13 quarterly series (3 foreign, 10 domestic), Australian data from the RBA and ABS, the foreign block from FRED. Data source for this run: <strong>real</strong>.</p>
 </section>

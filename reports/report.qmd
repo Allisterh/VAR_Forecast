@@ -93,6 +93,14 @@ simple benchmarks are surprisingly hard to beat for inflation. So the
 production forecast is a **weighted pool** of all models' distributions, and
 most of this report is about *which models earn their place and where*.
 
+::: {.callout-tip title="Where the equations live"}
+This report explains *what the suite does and what it finds*, in words. For
+the full mathematical specification — every prior, posterior, Gibbs step,
+forecasting recursion, scoring rule and combination formula, with equations
+and config keys — see the companion **technical reference**
+(`methodology.html`).
+:::
+
 **Why "small open economy" is in the title.** Australia does not move world
 demand, world commodity prices, or the federal funds rate. Every VAR here
 partitions its variables into a **foreign block** (world activity, commodity
