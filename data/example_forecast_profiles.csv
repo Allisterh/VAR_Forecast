@@ -1,0 +1,21 @@
+variable,date,value,note
+f_act,2026-04-01,0.45,ILLUSTRATIVE US real GDP qtr % growth - full path imposed
+f_act,2026-07-01,0.50,
+f_act,2026-10-01,0.52,
+f_act,2027-01-01,0.55,
+f_act,2027-04-01,0.55,
+f_act,2027-07-01,0.55,
+f_act,2027-10-01,0.55,
+f_act,2028-01-01,0.55,
+f_act,2028-04-01,0.55,
+f_rate,2026-04-01,3.50,ILLUSTRATIVE fed funds level - full path imposed
+f_rate,2026-07-01,3.40,
+f_rate,2026-10-01,3.30,
+f_rate,2027-01-01,3.20,
+f_rate,2027-04-01,3.10,
+f_rate,2027-07-01,3.00,
+f_rate,2027-10-01,3.00,
+f_rate,2028-01-01,3.00,
+f_rate,2028-04-01,3.00,
+cpi_inflation,2026-04-01,0.80,ILLUSTRATIVE trimmed-mean qtr % - one-quarter nowcast only
+unemp_rate,2026-04-01,4.30,ILLUSTRATIVE unemployment rate % - one-quarter nowcast only

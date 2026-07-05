@@ -4,10 +4,16 @@
 # of future values in model units, integrating over parameter draws (recycled
 # if ndraw > stored draws) and future shocks.
 #
-# condition: optional list(variable =, path =, method = "wz"|"substitute").
-# Conditioning on a future path of one variable (e.g. a market-implied cash
-# rate). path may be shorter than h and may contain NAs (those steps are
-# unconstrained). Two methods (README.md D21):
+# condition: optional. Two equivalent forms (README.md D21/D23):
+#   list(variable =, path =, method =)          -- single variable (legacy)
+#   list(profiles = list(<var> = <path>, ...), method =)
+#     -- MULTI-VARIABLE forecast profiles: each named variable gets its own
+#        imposed path, and paths may have different lengths (e.g. the full
+#        9-quarter path for the foreign block, one quarter for CPI and the
+#        unemployment rate). Paths may be shorter than h and may contain NAs;
+#        those steps are unconstrained. Profiles for variables a member does
+#        not model are dropped for that member (logged once per call).
+# Two methods (README.md D21):
 #  * "wz" (default, Gaussian engines gibbs/ss/conj_br): Waggoner-Zha (1999)
 #    conditional simulation -- for each posterior draw the joint future
 #    shocks are drawn from their EXACT Gaussian conditional distribution
@@ -24,21 +30,49 @@ simulate_paths <- function(post, y, h, ndraw, condition = NULL,
   UseMethod("simulate_paths")
 }
 
-#' Normalise a condition: pad/trim path to h (NA = unconstrained step),
-#' resolve the default method.
+#' Normalise a condition into the canonical multi-variable form:
+#' condition$paths = named list(variable -> length-h numeric, NA-padded),
+#' with the default method resolved. Accepts both the legacy single-variable
+#' form (variable/path) and the profiles form.
 .norm_condition <- function(condition, h) {
   if (is.null(condition)) return(NULL)
-  p <- as.numeric(condition$path)
-  condition$path <- c(p, rep(NA_real_, max(0, h - length(p))))[seq_len(h)]
+  pad <- function(p) {
+    p <- as.numeric(p)
+    c(p, rep(NA_real_, max(0, h - length(p))))[seq_len(h)]
+  }
+  if (!is.null(condition$profiles)) {
+    condition$paths <- lapply(condition$profiles, pad)
+  } else if (!is.null(condition$variable)) {
+    condition$paths <- setNames(list(pad(condition$path)), condition$variable)
+  } else return(NULL)
+  condition$paths <- Filter(function(p) any(is.finite(p)), condition$paths)
+  if (!length(condition$paths)) return(NULL)
   if (is.null(condition$method)) condition$method <- "wz"
   condition
 }
 
+#' The h x M constraint matrix for one posterior's variable set: NA =
+#' unconstrained; profiles for variables the member does not model are
+#' dropped (logged). Returns NULL when nothing binds for this member.
+.cond_matrix <- function(condition, varnames, h) {
+  if (is.null(condition)) return(NULL)
+  cpath <- matrix(NA_real_, h, length(varnames))
+  miss <- setdiff(names(condition$paths), varnames)
+  if (length(miss))
+    log_debug("condition: profile(s) {paste(miss, collapse=', ')} not in this member's variable set, dropped")
+  for (v in intersect(names(condition$paths), varnames))
+    cpath[, match(v, varnames)] <- condition$paths[[v]]
+  if (!any(is.finite(cpath))) return(NULL)
+  cpath
+}
+
 .apply_condition <- function(ystep, s, condition, varnames) {
   if (is.null(condition)) return(ystep)
-  j <- match(condition$variable, varnames)
-  if (!is.na(j) && s <= length(condition$path) &&
-      is.finite(condition$path[s])) ystep[j] <- condition$path[s]
+  for (v in names(condition$paths)) {
+    j <- match(v, varnames)
+    if (!is.na(j) && is.finite(condition$paths[[v]][s]))
+      ystep[j] <- condition$paths[[v]][s]
+  }
   ystep
 }
 
@@ -73,29 +107,31 @@ simulate_paths <- function(post, y, h, ndraw, condition = NULL,
 }
 
 #' One Waggoner-Zha conditional path draw for a Gaussian VAR (B, Sigma).
-#' cj: column index of the conditioned variable; path: length-h with NAs for
-#' unconstrained steps; ss_: per-step shock scale (COVID decay path).
-#' The future stacked shocks u ~ N(0, blockdiag(ss_s^2 Sigma)) are drawn from
-#' their exact conditional distribution given R u = r via
+#' cpath: h x M constraint matrix (from .cond_matrix) -- finite entries are
+#' imposed values, NA = unconstrained; multiple variables with paths of
+#' different lengths are just more constraint rows. ss_: per-step shock
+#' scale (COVID decay path). The future stacked shocks
+#' u ~ N(0, blockdiag(ss_s^2 Sigma)) are drawn from their exact conditional
+#' distribution given R u = r via
 #'   u* = u + C R' (R C R')^{-1} (r - R u),
 #' then the path is iterated forward with u*.
-.wz_conditional_path <- function(B, Sigma, cS, ystate, h, cj, path, M, p, ss_) {
+.wz_conditional_path <- function(B, Sigma, cS, ystate, h, cpath, M, p, ss_) {
   m <- .deterministic_path(B, ystate, h, M, p)
-  cons <- which(is.finite(path))
+  cons <- which(is.finite(cpath), arr.ind = TRUE)   # cols: (s, cj)
   Psi <- .ma_weights(B, M, p, h)
-  # R: (#constraints x M*h); constraint s row: y_{cj,s} - m_{cj,s} =
+  # R: (#constraints x M*h); constraint (s, cj) row: y_{cj,s} - m_{cj,s} =
   #   sum_{j<=s} [Psi_{s-j}]_{cj,.} u_j
-  R <- matrix(0, length(cons), M * h)
-  for (i in seq_along(cons)) {
-    s <- cons[i]
+  R <- matrix(0, nrow(cons), M * h)
+  for (i in seq_len(nrow(cons))) {
+    s <- cons[i, 1]; cj <- cons[i, 2]
     for (j in seq_len(s))
       R[i, ((j - 1) * M + 1):(j * M)] <- Psi[[s - j + 1]][cj, ]
   }
-  r <- path[cons] - m[cons, cj]
+  r <- cpath[cons] - m[cons]
   # unconditional shock draw and blockdiag covariance
   u <- as.vector(vapply(seq_len(h), function(s)
     ss_[s] * drop(crossprod(cS, rnorm(M))), numeric(M)))
-  C_Rt <- matrix(0, M * h, length(cons))          # C R', C = blockdiag(ss^2 Sigma)
+  C_Rt <- matrix(0, M * h, nrow(cons))            # C R', C = blockdiag(ss^2 Sigma)
   for (j in seq_len(h)) {
     ix <- ((j - 1) * M + 1):(j * M)
     C_Rt[ix, ] <- (ss_[j]^2) * (Sigma %*% t(R[, ix, drop = FALSE]))
@@ -117,7 +153,7 @@ simulate_paths <- function(post, y, h, ndraw, condition = NULL,
 #' TRUE when a condition should take the WZ route for this posterior.
 .use_wz <- function(condition, varnames) {
   !is.null(condition) && identical(condition$method, "wz") &&
-    condition$variable %in% varnames && any(is.finite(condition$path))
+    any(names(condition$paths) %in% varnames)
 }
 
 #' Iterate one VAR path: B (K x M, intercept first), cS = chol(Sigma),
@@ -146,8 +182,8 @@ simulate_paths.post_gibbs <- function(post, y, h, ndraw, condition = NULL,
                                       shock_scale = NULL) {
   M <- post$M; p <- post$p
   condition <- .norm_condition(condition, h)
-  wz <- .use_wz(condition, post$varnames)
-  cj <- if (wz) match(condition$variable, post$varnames) else NA_integer_
+  cpath <- if (.use_wz(condition, post$varnames))
+    .cond_matrix(condition, post$varnames, h) else NULL
   ss_ <- if (is.null(shock_scale)) rep(1, h) else shock_scale
   paths <- array(NA_real_, c(ndraw, h, M))
   st0 <- .ystate(y, p)
@@ -156,8 +192,8 @@ simulate_paths.post_gibbs <- function(post, y, h, ndraw, condition = NULL,
     B <- post$B[k, , ]
     Sig <- post$Sigma[k, , ]
     cS <- chol(Sig)
-    paths[d, , ] <- if (wz) {
-      .wz_conditional_path(B, Sig, cS, st0, h, cj, condition$path, M, p, ss_)
+    paths[d, , ] <- if (!is.null(cpath)) {
+      .wz_conditional_path(B, Sig, cS, st0, h, cpath, M, p, ss_)
     } else {
       .iterate_path(B, cS, st0, h, M, p, condition, post$varnames,
                     shock_scale = shock_scale)
@@ -173,8 +209,8 @@ simulate_paths.post_ss <- function(post, y, h, ndraw, condition = NULL,
                                    shock_scale = NULL) {
   M <- post$M; p <- post$p
   condition <- .norm_condition(condition, h)
-  wz <- .use_wz(condition, post$varnames)
-  cj <- if (wz) match(condition$variable, post$varnames) else NA_integer_
+  cpath0 <- if (.use_wz(condition, post$varnames))
+    .cond_matrix(condition, post$varnames, h) else NULL
   ss_ <- if (is.null(shock_scale)) rep(1, h) else shock_scale
   paths <- array(NA_real_, c(ndraw, h, M))
   for (d in seq_len(ndraw)) {
@@ -185,15 +221,19 @@ simulate_paths.post_ss <- function(post, y, h, ndraw, condition = NULL,
     z <- sweep(y, 2, Psi)
     st <- .ystate(z, p)
     B <- rbind(0, A)                      # zero intercept in demeaned form
-    # condition in DEMEANED units so the conditioned variable feeds the
-    # recursion each step (same contract as the other engines)
+    # condition in DEMEANED units so the conditioned variables feed the
+    # recursion each step (same contract as the other engines); NA
+    # (unconstrained) entries stay NA under the sweep
     cond_z <- condition
     if (!is.null(cond_z)) {
-      j <- match(cond_z$variable, post$varnames)
-      if (!is.na(j)) cond_z$path <- cond_z$path - Psi[j]
+      for (v in names(cond_z$paths)) {
+        j <- match(v, post$varnames)
+        if (!is.na(j)) cond_z$paths[[v]] <- cond_z$paths[[v]] - Psi[j]
+      }
     }
-    zp <- if (wz) {
-      .wz_conditional_path(B, Sig, cS, st, h, cj, cond_z$path, M, p, ss_)
+    zp <- if (!is.null(cpath0)) {
+      .wz_conditional_path(B, Sig, cS, st, h,
+                           sweep(cpath0, 2, Psi), M, p, ss_)
     } else {
       .iterate_path(B, cS, st, h, M, p, condition = cond_z, post$varnames,
                     shock_scale = shock_scale)
@@ -235,8 +275,8 @@ simulate_paths.post_conj_br <- function(post, y, h, ndraw, condition = NULL,
   M <- post$M; p <- post$p; nf <- post$nf
   nd <- M - nf
   condition <- .norm_condition(condition, h)
-  wz <- .use_wz(condition, post$varnames)
-  cj <- if (wz) match(condition$variable, post$varnames) else NA_integer_
+  cpath <- if (.use_wz(condition, post$varnames))
+    .cond_matrix(condition, post$varnames, h) else NULL
   ss_ <- if (is.null(shock_scale)) rep(1, h) else shock_scale
   paths <- array(NA_real_, c(ndraw, h, M))
   st0 <- .ystate(y, p)                       # all vars, most recent first
@@ -244,11 +284,11 @@ simulate_paths.post_conj_br <- function(post, y, h, ndraw, condition = NULL,
     k <- floor((d - 1) * post$ndraw / ndraw) + 1   # seed paths across the full posterior
     Bf <- post$foreign$B[k, , ];  cSf <- chol(post$foreign$Sigma[k, , ])
     Bd <- post$domestic$B[k, , ]; cSd <- chol(post$domestic$Sigma[k, , ])
-    if (wz) {
+    if (!is.null(cpath)) {
       jr <- .conj_br_joint(Bf, post$foreign$Sigma[k, , ], Bd,
                            post$domestic$Sigma[k, , ], M, p, nf)
       paths[d, , ] <- .wz_conditional_path(jr$B, jr$Sigma, chol(jr$Sigma),
-                                           st0, h, cj, condition$path, M, p, ss_)
+                                           st0, h, cpath, M, p, ss_)
       next
     }
     st <- st0

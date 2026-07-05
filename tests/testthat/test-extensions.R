@@ -247,3 +247,85 @@ test_that("event probabilities are valid and respond to the draws", {
   expect_lt(rec_hi, 0.3)   # healthy growth: low contraction probability
   expect_gt(rec_lo, 0.9)   # deep contraction draws: near-certain
 })
+
+# ---- forecast profiles: multi-variable conditioning (D23) ------------------------
+
+test_that("multi-variable profiles bind exactly with different path lengths", {
+  cfg <- tiny_cfg()
+  spec <- build_transform_spec(cfg)
+  raw <- generate_synthetic_data(cfg, spec)
+  td <- transform_data(raw, spec)
+  spec_s <- vars_for_set(spec, "small")
+  y <- as.matrix(td[, spec_s$variable])
+  member <- list(name = "t", kind = "var", engine = "gibbs", set = "small",
+                 lags = 2, prior = list(lambda = 0.2, soc = FALSE, dio = FALSE))
+  set.seed(11)
+  post <- fit_var_member(y, member, spec_s, cfg)
+  # RBA pattern: full 6-quarter path for the foreign block, 1 quarter for
+  # CPI and unemployment; a profile for a variable NOT in the small set
+  # (wpi_growth) must be dropped silently
+  cond <- list(profiles = list(
+    f_act = c(0.5, 0.5, 0.6, 0.6, 0.6, 0.6),
+    f_rate = c(3.5, 3.4, 3.3, 3.2, 3.1, 3.0),
+    cpi_inflation = 0.8,
+    unemp_rate = 4.3,
+    wpi_growth = 0.9), method = "wz")
+  set.seed(12)
+  paths <- simulate_paths(post, y, 6, 40, condition = cond)
+  for (s in 1:6) {
+    expect_equal(unname(paths[, s, "f_act"]), rep(cond$profiles$f_act[s], 40),
+                 tolerance = 1e-8)
+    expect_equal(unname(paths[, s, "f_rate"]), rep(cond$profiles$f_rate[s], 40),
+                 tolerance = 1e-8)
+  }
+  expect_equal(unname(paths[, 1, "cpi_inflation"]), rep(0.8, 40), tolerance = 1e-8)
+  expect_equal(unname(paths[, 1, "unemp_rate"]), rep(4.3, 40), tolerance = 1e-8)
+  # beyond their profile, CPI / unemployment are free again
+  expect_gt(sd(paths[, 2, "cpi_inflation"]), 1e-3)
+  expect_gt(sd(paths[, 2, "unemp_rate"]), 1e-3)
+  # unconstrained variables always stochastic
+  expect_gt(sd(paths[, 1, "gdp_growth"]), 1e-3)
+})
+
+test_that("profiles bind under ss and conj_br engines too", {
+  cfg <- tiny_cfg()
+  spec <- build_transform_spec(cfg)
+  raw <- generate_synthetic_data(cfg, spec)
+  td <- transform_data(raw, spec)
+  spec_s <- vars_for_set(spec, "small")
+  y <- as.matrix(td[, spec_s$variable])
+  cond <- list(profiles = list(f_act = c(0.5, 0.6), unemp_rate = 4.4),
+               method = "wz")
+  for (eng in c("ss", "conj_br")) {
+    member <- list(name = eng, kind = "var", engine = eng, set = "small",
+                   lags = 2, prior = list(lambda = 0.2, soc = FALSE, dio = FALSE))
+    set.seed(13)
+    post <- fit_var_member(y, member, spec_s, cfg)
+    set.seed(14)
+    paths <- simulate_paths(post, y, 3, 25, condition = cond)
+    expect_equal(unname(paths[, 1, "f_act"]), rep(0.5, 25), tolerance = 1e-6)
+    expect_equal(unname(paths[, 2, "f_act"]), rep(0.6, 25), tolerance = 1e-6)
+    expect_equal(unname(paths[, 1, "unemp_rate"]), rep(4.4, 25), tolerance = 1e-6)
+    expect_gt(sd(paths[, 3, "f_act"]), 1e-4)
+  }
+})
+
+test_that("read_forecast_profiles parses date and h forms and trims the window", {
+  f <- tempfile(fileext = ".csv")
+  writeLines(c("variable,date,value",
+               "f_act,2026-04-01,0.5",
+               "f_act,2026-07-01,0.6",
+               "cpi_inflation,2026-04-01,0.8",
+               "unemp_rate,2020-01-01,9.9",     # before the origin: dropped
+               "f_act,2036-01-01,0.7"), f)      # beyond H: dropped
+  pr <- read_forecast_profiles(f, origin_date = as.Date("2026-01-01"), H = 12)
+  expect_equal(sort(names(pr)), c("cpi_inflation", "f_act"))
+  expect_equal(pr$f_act[1:2], c(0.5, 0.6))
+  expect_true(all(is.na(pr$f_act[3:12])))
+  expect_equal(pr$cpi_inflation[1], 0.8)
+  # h form
+  f2 <- tempfile(fileext = ".csv")
+  writeLines(c("variable,h,value", "cash_rate,1,3.6", "cash_rate,2,3.35"), f2)
+  pr2 <- read_forecast_profiles(f2, origin_date = as.Date("2026-01-01"), H = 12)
+  expect_equal(pr2$cash_rate[1:2], c(3.60, 3.35))
+})

@@ -46,21 +46,72 @@ final_forecasts <- function(td, spec, cfg, scores) {
        origin = T_n, origin_date = td$date[T_n])
 }
 
-#' Scenario forecasts conditional on a configured future path (README.md D21),
-#' e.g. a market-implied cash-rate path: cfg$report$conditional gives
-#' {variable:, path: [..]}. Runs the VAR members only (the univariate
-#' benchmarks cannot see the conditioning variable) with Waggoner-Zha
-#' conditional simulation (substitution fallback for the SV engine), pools
-#' them with equal weights, and writes the scenario table alongside the
-#' unconditional one. Returns the table, or NULL when no scenario configured.
+#' Read a forecast-profiles CSV into the named-list form the conditioning
+#' machinery consumes (README.md D23). Format: one row per imposed
+#' variable-quarter with columns
+#'   variable, value, and EITHER date (the target quarter, any day within
+#'   it) OR h (quarters ahead of the origin, h = 1 is the first forecast
+#'   quarter).
+#' Different variables may appear with different numbers of rows (a full
+#' path for the foreign block, one quarter for CPI/unemployment). Rows
+#' dated at/before the origin or beyond `H` are dropped with a warning.
+read_forecast_profiles <- function(path, origin_date, H) {
+  x <- read.csv(path, stringsAsFactors = FALSE)
+  stopifnot("profiles file needs a 'variable' column" = "variable" %in% names(x),
+            "profiles file needs a 'value' column" = "value" %in% names(x),
+            "profiles file needs 'date' or 'h'" = any(c("date", "h") %in% names(x)))
+  if (!"h" %in% names(x)) {
+    x$h <- .qidx(as.Date(x$date)) - .qidx(as.Date(origin_date))
+  }
+  bad <- x$h < 1 | x$h > H
+  if (any(bad)) {
+    log_warn("profiles: dropping {sum(bad)} row(s) outside the forecast window (h 1-{H})")
+    x <- x[!bad, , drop = FALSE]
+  }
+  if (!nrow(x)) return(NULL)
+  profiles <- lapply(split(x, x$variable), function(d) {
+    p <- rep(NA_real_, H)
+    p[d$h] <- d$value
+    p
+  })
+  profiles
+}
+
+#' Scenario forecasts conditional on configured forecast PROFILES
+#' (README.md D21/D23). cfg$report$conditional accepts, in order of
+#' precedence:
+#'   profiles_file: <csv>            -- see read_forecast_profiles()
+#'   profiles: {<var>: [path], ...}  -- inline per-variable paths (h = 1..)
+#'   variable/path                   -- legacy single-variable form
+#' Different variables may be pinned over different horizons (the RBA
+#' pattern: the full path for the foreign block, one quarter for CPI and
+#' the unemployment rate). Runs the VAR members only (univariate benchmarks
+#' cannot see the conditioning variables) with Waggoner-Zha conditional
+#' simulation (substitution fallback for the SV engine), pools them with
+#' equal weights, and writes the scenario table alongside the unconditional
+#' one, with imposed cells flagged. Returns the table, or NULL when no
+#' scenario is configured.
 conditional_forecasts <- function(td, spec, cfg,
                                   out_dir = "output/forecasts") {
   cc <- cfg$report$conditional
-  if (is.null(cc) || is.null(cc$variable)) return(NULL)
-  condition <- list(variable = cc$variable,
-                    path = as.numeric(unlist(cc$path)), method = "wz")
-  members <- Filter(function(m) m$kind == "var", all_members(cfg))
+  if (is.null(cc)) return(NULL)
   H <- cfg$horizons
+  origin_date <- td$date[nrow(td)]
+  profiles <- if (!is.null(cc$profiles_file)) {
+    read_forecast_profiles(cc$profiles_file, origin_date, H)
+  } else if (!is.null(cc$profiles)) {
+    lapply(cc$profiles, function(p) as.numeric(unlist(p)))
+  } else if (!is.null(cc$variable)) {
+    setNames(list(as.numeric(unlist(cc$path))), cc$variable)
+  } else NULL
+  if (is.null(profiles) || !length(profiles)) return(NULL)
+  unknown <- setdiff(names(profiles), spec$variable)
+  if (length(unknown))
+    stop("report.conditional: unknown variable(s) in profiles: ",
+         paste(unknown, collapse = ", "))
+  condition <- list(profiles = profiles, method = "wz")
+
+  members <- Filter(function(m) m$kind == "var", all_members(cfg))
   draws <- list()
   for (m in members) {
     set.seed(derive_seed(cfg$master_seed, paste0("cond-", m$name)))
@@ -68,20 +119,38 @@ conditional_forecasts <- function(td, spec, cfg,
     draws[[m$name]] <- fc$draws
   }
   tgt <- spec$variable[spec$target]
+  fdates <- seq(origin_date, by = "quarter", length.out = H + 1)[-1]
+  pad <- function(p) c(p, rep(NA_real_, max(0, H - length(p))))[seq_len(H)]
   rows <- list()
   for (v in tgt) {
     all_dr <- do.call(rbind, lapply(draws, function(d) d[, , v]))
     qm <- t(apply(all_dr, 2, quantile, probs = c(0.05, 0.5, 0.95)))
+    imp <- if (v %in% names(profiles)) is.finite(pad(profiles[[v]]))
+           else rep(FALSE, H)
     rows[[v]] <- data.frame(variable = v, h = seq_len(H),
-                            point = qm[, 2], lo90 = qm[, 1], hi90 = qm[, 3])
+                            target_date = fdates,
+                            point = qm[, 2], lo90 = qm[, 1], hi90 = qm[, 3],
+                            imposed = imp)
+  }
+  # echo imposed profiles for NON-target variables (e.g. the foreign block)
+  # so the output carries the full audit trail of what was pinned
+  for (v in setdiff(names(profiles), tgt)) {
+    pv <- pad(profiles[[v]])
+    hs <- which(is.finite(pv))
+    if (length(hs))
+      rows[[v]] <- data.frame(variable = v, h = hs, target_date = fdates[hs],
+                              point = pv[hs], lo90 = pv[hs], hi90 = pv[hs],
+                              imposed = TRUE)
   }
   tab <- do.call(rbind, rows)
-  tab$conditioned_on <- cc$variable
-  tab$origin_date <- td$date[nrow(td)]
+  tab$conditioned_on <- paste(names(profiles), collapse = "+")
+  tab$origin_date <- origin_date
   dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
   write.csv(tab, file.path(out_dir, "forecast_table_conditional.csv"),
             row.names = FALSE)
-  log_info("conditional scenario written ({cc$variable} path, {length(members)} VAR members)")
+  log_info(paste0("conditional scenario written (profiles: ",
+                  paste(names(profiles), collapse = ", "), "; ",
+                  length(members), " VAR members)"))
   tab
 }
 

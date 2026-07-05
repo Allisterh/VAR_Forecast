@@ -24,7 +24,7 @@ run); the rendered narrative report with figures is
 - [Correctness properties](#correctness-properties)
 - [Repository layout](#repository-layout)
 - [Data sources and audit](#data-sources-and-audit)
-- [Modelling decisions](#modelling-decisions) (D1–D22)
+- [Modelling decisions](#modelling-decisions) (D1–D23)
 
 ## Quick start
 
@@ -876,3 +876,73 @@ therefore remains the documented simplification (D1/D18); lifting it needs
 either a manually-supplied trading-partner GDP file (the external-forecasts
 hook pattern) or ragged-edge estimation — both scoped as extensions, neither
 wired.
+
+### D23. Forecast profiles: per-variable conditioning horizons (added 2026-07-05)
+
+**Motivation.** In the RBA forecast round, different variables are pinned over
+different horizons: the **global block** is imposed over the *entire*
+projection window (the international forecasts are taken as given, e.g.
+2026Q2–2028Q2), while for domestic variables with good nowcasts — quarterly
+CPI, the unemployment rate — only the **next quarter** is imposed. A useful
+tool must accept this ragged pattern directly.
+
+**Choice.** The D21 Waggoner–Zha machinery generalises with no new theory:
+each imposed (variable, quarter) pair is one more row in the constraint
+matrix R, so multi-variable profiles of different lengths are drawn from the
+same exact conditional shock distribution
+u* = u + C R′(R C R′)⁻¹(r − R u). Three equivalent ways to supply profiles
+(config `report.conditional`):
+
+```yaml
+# 1. a CSV of imposed points (preferred; profiles are data, not config)
+conditional:
+  profiles_file: data/example_forecast_profiles.csv
+# 2. inline paths, h = 1.. (h = 1 is the first quarter after the panel end)
+conditional:
+  profiles:
+    f_act: [0.45, 0.50, 0.52, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55]
+    f_rate: [3.50, 3.40, 3.30, 3.20, 3.10, 3.00, 3.00, 3.00, 3.00]
+    cpi_inflation: [0.80]     # one-quarter nowcast only
+    unemp_rate: [4.30]        # one-quarter nowcast only
+# 3. the legacy single-variable form (variable: / path:)
+```
+
+The CSV format is one row per imposed variable-quarter — `variable`,
+`date` (any day in the target quarter) *or* `h`, and `value` in the
+variable's model units (qtr % growth for dlog series, the level for rates):
+
+```csv
+variable,date,value
+f_act,2026-04-01,0.45
+f_act,2026-07-01,0.50
+cpi_inflation,2026-04-01,0.80
+unemp_rate,2026-04-01,4.30
+```
+
+`data/example_forecast_profiles.csv` ships the full worked example
+(illustrative values — replace each round). Output:
+`output/forecasts/forecast_table_conditional.csv` with a `target_date`
+column and an `imposed` flag marking which cells were pinned vs forecast;
+the report renders it in §6.2. Profiles for variables a member does not
+model (e.g. a medium-set variable under a small member) are dropped for
+that member; profiles for variables not in the panel at all error loudly.
+Rows outside the forecast window (at/before the origin, or beyond
+`horizons`) are dropped with a warning — so a profiles file dated for a
+new forecast round keeps working as the panel end moves.
+
+**Mechanics reminder.** Imposition happens per posterior draw, so parameter
+uncertainty is retained; only the shock draws are constrained. Un-pinned
+quarters of a partially-pinned variable (CPI from h = 2 on) revert to
+model-driven forecasts *consistent with* the pinned quarter, and un-pinned
+variables (GDP, the cash rate) respond to the profiles through both the lag
+dynamics and the contemporaneous shock correlations. The SV members cannot
+take exact Gaussian conditioning and fall back to hard substitution
+(logged); the scenario pool is the VAR members with equal weights.
+
+**Rejected.** Treating imposed paths as data appended to the panel
+(contaminates estimation and the jump-off); per-variable "soft" conditioning
+with tolerance bands (Waggoner–Zha soft conditions — a clean future
+extension if profile uncertainty is wanted). **Config:**
+`report.conditional.profiles_file` / `.profiles`. Unit tests: profiles of
+different lengths bind exactly under gibbs/ss/conj_br; window-trimming and
+date→h resolution in `read_forecast_profiles()`.

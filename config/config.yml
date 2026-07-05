@@ -297,11 +297,16 @@ default:
       recession_ye_gdp_below: 0.0    # P(year-ended GDP growth < 0)
       inflation_band: [2.0, 3.0]     # P(year-ended trimmed mean in the band)
       unemp_rise: 0.75               # P(unemployment up >= 0.75pp vs jump-off)
-    # Optional scenario: conditional forecasts given a future path for one
-    # variable (Waggoner-Zha for the Gaussian engines; README.md D21), e.g. a
-    # market-implied cash-rate path. Uncomment and set the path (length <= 12,
-    # in variable units; shorter paths leave later horizons unconstrained):
-    # conditional:
-    #   variable: cash_rate
-    #   path: [3.60, 3.35, 3.10, 3.10]
-    conditional: ~
+    # Forecast profiles (README.md D21/D23): impose future paths for selected
+    # variables, each over its own horizon -- the RBA pattern is to pin the
+    # FULL path of the global block over the forecast round's window and only
+    # ONE quarter (the nowcast) for CPI and the unemployment rate. Imposed via
+    # Waggoner-Zha conditional simulation (exact for the Gaussian engines).
+    # Three equivalent ways to supply them:
+    #   profiles_file: <csv with variable, date|h, value>   (preferred)
+    #   profiles: {f_act: [0.45, 0.50], cpi_inflation: [0.8]}   (inline, h=1..)
+    #   variable: cash_rate / path: [3.6, 3.35]             (legacy single)
+    # The bundled example file carries ILLUSTRATIVE values -- replace it with
+    # the round's actual profiles, or set `conditional: ~` to disable.
+    conditional:
+      profiles_file: data/example_forecast_profiles.csv
