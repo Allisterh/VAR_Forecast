@@ -25,10 +25,9 @@ transform_data <- function(raw, spec) {
   first <- which(ok)[1]
   last  <- max(which(ok))
   out <- out[first:last, , drop = FALSE]
-  # interior NAs (mixed publication lags in real data): trim trailing rows
-  # until the panel is balanced rather than imputing
-  while (nrow(out) > 0 &&
-         !all(is.finite(as.matrix(out[nrow(out), -1])))) out <- out[-nrow(out), ]
+  # interior NAs (mixed publication lags in real data): error rather than
+  # imputing or silently truncating (first:last is already the widest span
+  # bounded by all-finite rows, so any remaining NA here is interior)
   if (anyNA(out[, -1])) {
     bad <- names(out[, -1])[colSums(!is.finite(as.matrix(out[, -1]))) > 0]
     stop("interior missing values in: ", paste(bad, collapse = ", "))
@@ -50,6 +49,11 @@ check_data <- function(td, spec, min_quarters = 80) {
   growth <- spec$variable[spec$transform == "dlog"]
   checks$growth_range <- all(vapply(growth, function(v)
     all(abs(td[[v]]) < 50), logical(1)))
+  # 100*log of an index; ~e..~e^8 is generous but catches unit errors (an
+  # unlogged raw index, or a doubled 100x scaling)
+  loglevels <- spec$variable[spec$transform == "loglevel"]
+  checks$loglevel_range <- all(vapply(loglevels, function(v)
+    all(is.finite(td[[v]]) & td[[v]] > 100 & td[[v]] < 800), logical(1)))
   failed <- names(checks)[!unlist(checks)]
   if (length(failed)) stop("data checks failed: ", paste(failed, collapse = ", "))
   log_info("data checks passed ({nrow(td)} quarters, {ncol(td)-1} vars)")

@@ -254,13 +254,17 @@
 }
 
 #' "Who wins" matrix: best model (by mean CRPS over all 12 horizons) per
-#' variable x horizon bucket.
+#' variable x horizon bucket. A cell with zero finite crps values (all
+#' members NA/NaN, or no rows at all) renders "—" rather than crashing
+#' aggregate() ("no rows to aggregate").
 .winner_matrix <- function(scores, variables, buckets, measure = "level") {
   hdr <- paste0("| Variable | ", paste(names(buckets), collapse = " | "), " |")
   sep <- paste0("|", paste(rep(":--", length(buckets) + 1), collapse = "|"), "|")
   rows <- vapply(variables, function(v) {
     cells <- vapply(buckets, function(hs) {
       d <- scores[scores$variable == v & scores$measure == measure & scores$h %in% hs, ]
+      d <- d[is.finite(d$crps), ]
+      if (!nrow(d)) return("—")
       agg <- aggregate(crps ~ member, d, mean)
       w <- agg$member[which.min(agg$crps)]
       sprintf("%s (%.3f)", w, min(agg$crps))
@@ -338,21 +342,39 @@
 
 #' "Do the combinations beat the best member" table: mean CRPS over all targets
 #' by horizon bucket, members ordered best-first, best per column bolded.
+#' Defensive in the style of .metric_table: bucket means are taken over
+#' FINITE crps values only (a bucket with zero finite values yields NA),
+#' rows are ordered by rowMeans(na.rm = TRUE), the column best is the min of
+#' finite values (NA if none), and NA cells render "—" rather than throwing
+#' on `if (abs(A[m, j] - best[j]) < 1e-9)` with a missing operand.
 .combo_vs_best <- function(add, view, buckets) {
   add("| Model | near (1-4) | medium (5-8) | far (9-12) |")
   add("|:--|:--|:--|:--|")
   members <- unique(view$member)
   avg <- lapply(members, function(m)
-    sapply(buckets, function(hs) mean(view$crps[view$member == m & view$h %in% hs])))
+    sapply(buckets, function(hs) {
+      x <- view$crps[view$member == m & view$h %in% hs]
+      x <- x[is.finite(x)]
+      if (!length(x)) return(NA_real_)
+      mean(x)
+    }))
   names(avg) <- members
   A <- do.call(rbind, avg)
-  ord <- order(rowMeans(A)); best <- apply(A, 2, min)
-  for (m in members[ord]) {
+  ord <- order(rowMeans(A, na.rm = TRUE))
+  A <- A[ord, , drop = FALSE]; members <- rownames(A)
+  best <- apply(A, 2, function(z) {
+    z <- z[is.finite(z)]
+    if (!length(z)) return(NA_real_)
+    min(z)
+  })
+  for (i in seq_along(members)) {
     cells <- vapply(seq_len(ncol(A)), function(j) {
-      s <- formatC(A[m, j], format = "f", digits = 3)
-      if (abs(A[m, j] - best[j]) < 1e-9) paste0("**", s, "**") else s
+      x <- A[i, j]
+      if (is.na(x)) return("—")
+      s <- formatC(x, format = "f", digits = 3)
+      if (is.finite(best[j]) && abs(x - best[j]) < 1e-9) paste0("**", s, "**") else s
     }, "")
-    add(sprintf("| %s | %s |", m, paste(cells, collapse = " | ")))
+    add(sprintf("| %s | %s |", members[i], paste(cells, collapse = " | ")))
   }
 }
 

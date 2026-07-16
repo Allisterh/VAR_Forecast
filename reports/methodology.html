@@ -6,7 +6,7 @@
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
-<meta name="dcterms.date" content="2026-07-05">
+<meta name="dcterms.date" content="2026-07-16">
 
 <title>Methodology and Technical Reference</title>
 <style>
@@ -2388,7 +2388,7 @@ window.Quarto = {
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">July 5, 2026</p>
+      <p class="date">July 16, 2026</p>
     </div>
   </div>
   
@@ -2439,7 +2439,7 @@ I_M &amp; 0 &amp; \cdots &amp; 0 \\
 \end{pmatrix}.
 \]</span></p>
 <p>The system is covariance-stationary iff <span class="math inline">\(\rho(\mathbf A)\equiv\max_i
-|\lambda_i(\mathbf A)| &lt; 1\)</span>. <code>max_eig_mod()</code> computes <span class="math inline">\(\rho(\mathbf A)\)</span>; it drives the stability diagnostic (§11), the explosive-draw rejection in the steady-state sampler (§6.4), and the stationarity truncation of the AR benchmark (§8).</p>
+|\lambda_i(\mathbf A)| &lt; 1\)</span>. <code>max_eig_mod()</code> computes <span class="math inline">\(\rho(\mathbf A)\)</span>; it drives the stability diagnostic (§14), the explosive-draw rejection in the steady-state sampler (§6.4), and the stationarity truncation of the AR benchmark (§13).</p>
 </section>
 <section id="sec-blockexog" class="level2" data-number="1.4">
 <h2 data-number="1.4" class="anchored" data-anchor-id="sec-blockexog"><span class="header-section-number">1.4</span> The small-open-economy partition and block exogeneity</h2>
@@ -2455,8 +2455,8 @@ A_l^{df} &amp; A_l^{dd}
 <p><span id="eq-blockexog"><span class="math display">\[
 A_l^{fd} = 0 \quad \text{for all } l=1,\dots,p .
 \tag{3}\]</span></span></p>
-<p>Economically, Australia is a price-taker on world activity and commodity prices; without <a href="#eq-blockexog" class="quarto-xref">Equation 3</a> the model would infer, from 30 years of comovement, spurious channels in which Australian variables move world demand — corrupting the medium-horizon dynamics that the iterated forecast (§7) propagates. RBA RDP 2013-06 shows imposing it materially raises the measured role of foreign shocks. Three engines impose it three ways (§§4–6); one member (<code>small_unres</code>, <strong>D19</strong>) deliberately omits it as a control. The restriction constrains the <strong>lag dynamics</strong> only; the steady-state means remain coupled through <span class="math inline">\(\Sigma\)</span> (§6.4, <strong>D3</strong>).</p>
-<p>The posterior-mean violation <span class="math inline">\(\max_{l}\, \| A_l^{fd}\|_{\max}\)</span> is logged per fit (<code>block_exog_metric()</code>) and gated below <span class="math inline">\(10^{-2}\)</span> (§11); structural-zero engines report exactly <span class="math inline">\(0\)</span>.</p>
+<p>Economically, Australia is a price-taker on world activity and commodity prices; without <a href="#eq-blockexog" class="quarto-xref">Equation 3</a> the model would infer, from 30 years of comovement, spurious channels in which Australian variables move world demand — corrupting the medium-horizon dynamics that the iterated forecast (§8) propagates. RBA RDP 2013-06 shows imposing it materially raises the measured role of foreign shocks. Three engines impose it three ways (§6); one member (<code>small_unres</code>, <strong>D19</strong>) deliberately omits it as a control. The restriction constrains the <strong>lag dynamics</strong> only; the steady-state means remain coupled through <span class="math inline">\(\Sigma\)</span> (§6.4, <strong>D3</strong>).</p>
+<p>The posterior-mean violation <span class="math inline">\(\max_{l}\, \| A_l^{fd}\|_{\max}\)</span> is logged per fit (<code>block_exog_metric()</code>) and gated below <span class="math inline">\(10^{-2}\)</span> (§14); structural-zero engines report exactly <span class="math inline">\(0\)</span>.</p>
 </section>
 </section>
 <section id="sec-data" class="level1" data-number="2">
@@ -2539,26 +2539,26 @@ s_0[k,i] = \lambda \cdot
 <tr class="odd">
 <td><span class="math inline">\(\lambda\)</span></td>
 <td>overall tightness (own-lag sd at lag 1)</td>
-<td>member-specific; <code>auto</code>, <span class="math inline">\(0.05\)</span>, <span class="math inline">\(0.4\)</span></td>
+<td>member-specific; <code>auto</code>, <span class="math inline">\(0.05\)</span>, <span class="math inline">\(0.1\)</span>, <span class="math inline">\(0.4\)</span></td>
 <td>§5, <code>prior.lambda</code></td>
 </tr>
 <tr class="even">
 <td><span class="math inline">\(\kappa\)</span></td>
 <td>cross-variable shrinkage</td>
 <td><span class="math inline">\(0.5\)</span></td>
-<td><code>cross</code></td>
+<td>function default (<code>minnesota_prior</code>)</td>
 </tr>
 <tr class="odd">
 <td><span class="math inline">\(\alpha\)</span></td>
 <td>lag decay exponent (<span class="math inline">\(s_0\propto l^{-\alpha}\)</span>)</td>
 <td><span class="math inline">\(1\)</span></td>
-<td><code>lag_decay</code></td>
+<td>function default (<code>minnesota_prior</code>)</td>
 </tr>
 <tr class="even">
 <td><span class="math inline">\(\theta_c\)</span></td>
 <td>intercept looseness (multiple of <span class="math inline">\(\sigma_i\)</span>)</td>
 <td><span class="math inline">\(10\)</span></td>
-<td><code>intercept_scale</code></td>
+<td>function default (<code>minnesota_prior</code>)</td>
 </tr>
 </tbody>
 </table>
@@ -2603,7 +2603,7 @@ x^\ast_j = \frac{\bar y_j}{\mu}\,\big(0,\underbrace{e_j,\dots,e_j}_{p\text{ lag 
 y^\ast = \frac{\bar y}{\delta_{\text{dio}}},\qquad
 x^\ast = \frac{1}{\delta_{\text{dio}}}\big(1,\ \bar y^\top,\dots,\bar y^\top\big),
 \]</span></p>
-<p>a single co-persistence / common-trend prior favouring the presence of unit roots without over-differencing. Both are applied only to level variables; applying them to growth rates would bias the well-estimated short-run dynamics (<strong>D5</strong>). For the block-recursive engine the dummies are split by block and the domestic dummy rows carry the contemporaneous-foreign columns (§4.2).</p>
+<p>a single co-persistence / common-trend prior favouring the presence of unit roots without over-differencing. Both are applied only to level variables; applying them to growth rates would bias the well-estimated short-run dynamics (<strong>D5</strong>). For the block-recursive engine the dummies are split by block and the domestic dummy rows carry the contemporaneous-foreign columns (§6.2).</p>
 </section>
 <section id="sec-glp" class="level1" data-number="5">
 <h1 data-number="5"><span class="header-section-number">5</span> Data-driven shrinkage: GLP marginal-likelihood selection</h1>
@@ -2624,11 +2624,11 @@ S_1 = S_0 + Y^\top Y + B_0^\top\Omega_0^{-1}B_0 - B_1^\top P_1 B_1,\quad
 -\frac{\nu_1}{2}\log|S_1|
 +\frac{M}{2}\Big(\!-\log|P_1| - \log|\Omega_0|\Big),
 \tag{8}\]</span></span></p>
-<p>where <span class="math inline">\(\log\Gamma_M\)</span> is the multivariate log-gamma (<code>lmvgamma()</code>) and <span class="math inline">\(\log|P_1|\)</span> is read off its Cholesky factor for stability. <code>select_lambda()</code> evaluates <a href="#eq-logml" class="quarto-xref">Equation 8</a> on the grid <span class="math inline">\(\{0.05,0.1,0.15,0.2,0.3,0.4,0.6\}\)</span> (<code>glp.lambda_grid</code>) and returns the maximiser. Crucially this is <strong>re-run at every forecast origin inside the recursive loop</strong> on the data up to that origin, so the selection carries no look-ahead. Two members keep fixed <span class="math inline">\(\lambda\)</span> (<span class="math inline">\(0.05\)</span> tight, <span class="math inline">\(0.4\)</span> loose) for suite diversity.</p>
+<p>where <span class="math inline">\(\log\Gamma_M\)</span> is the multivariate log-gamma (<code>lmvgamma()</code>) and <span class="math inline">\(\log|P_1|\)</span> is read off its Cholesky factor for stability. <code>select_lambda()</code> evaluates <a href="#eq-logml" class="quarto-xref">Equation 8</a> on the grid <span class="math inline">\(\{0.05,0.1,0.15,0.2,0.3,0.4,0.6\}\)</span> (<code>glp.lambda_grid</code>) and returns the maximiser. Crucially this is <strong>re-run at every forecast origin inside the recursive loop</strong> on the data up to that origin, so the selection carries no look-ahead. Three members keep fixed <span class="math inline">\(\lambda\)</span> (<span class="math inline">\(0.05\)</span> <code>small_tight</code>, <span class="math inline">\(0.1\)</span> <code>medium_conj</code>, <span class="math inline">\(0.4\)</span> <code>small_loose_p5</code>) for suite diversity.</p>
 </section>
 <section id="sec-engines" class="level1" data-number="6">
 <h1 data-number="6"><span class="header-section-number">6</span> Estimation engines</h1>
-<p>Four engines share the interface <code>fit(y, member, spec, cfg) → posterior</code> and a <code>simulate_paths()</code> method (§7). Each returns draws <span class="math inline">\(\{(B^{(d)},\Sigma^{(d)})\}_{d=1}^{N}\)</span> (or the SV analogue) and MCMC diagnostics.</p>
+<p>Four engines share the interface <code>fit(y, member, spec, cfg) → posterior</code> and a <code>simulate_paths()</code> method (§8). Each returns draws <span class="math inline">\(\{(B^{(d)},\Sigma^{(d)})\}_{d=1}^{N}\)</span> (or the SV analogue) and MCMC diagnostics.</p>
 <section id="sec-conj-post" class="level2" data-number="6.1">
 <h2 data-number="6.1" class="anchored" data-anchor-id="sec-conj-post"><span class="header-section-number">6.1</span> Conjugate NIW posterior and sampler</h2>
 <p>Under <a href="#eq-conj-prior" class="quarto-xref">Equation 6</a> the posterior is conjugate:</p>
@@ -2671,7 +2671,7 @@ G^\top\Sigma_f &amp; G^\top\Sigma_f G + \Sigma_d
 </section>
 <section id="sec-gibbs" class="level2" data-number="6.3">
 <h2 data-number="6.3" class="anchored" data-anchor-id="sec-gibbs"><span class="header-section-number">6.3</span> Independent Normal–inverse-Wishart Gibbs engine <code>gibbs</code></h2>
-<p>The workhorse (§ D3 requires it for block exogeneity). Prior: <span class="math inline">\(\operatorname{vec}(B)\sim\mathcal N(b_0, V_0)\)</span> with the <strong>diagonal</strong> <span class="math inline">\(V_0\)</span> from the independent Minnesota moments (<a href="#eq-minn" class="quarto-xref">Equation 4</a>, so <span class="math inline">\(V_0 =
+<p>The workhorse (<strong>D3</strong> requires it for block exogeneity). Prior: <span class="math inline">\(\operatorname{vec}(B)\sim\mathcal N(b_0, V_0)\)</span> with the <strong>diagonal</strong> <span class="math inline">\(V_0\)</span> from the independent Minnesota moments (<a href="#eq-minn" class="quarto-xref">Equation 4</a>, so <span class="math inline">\(V_0 =
 \operatorname{diag}(\operatorname{vec}(s_0)^2)\)</span> and the block-exog spike <a href="#eq-blockexog-prior" class="quarto-xref">Equation 5</a>), and <span class="math inline">\(\Sigma\sim\mathcal{IW}(S_0,\nu_0)\)</span>, <span class="math inline">\(\nu_0=M+2\)</span>. The two full conditionals are Gibbs-sampled (<code>fit_gibbs</code>, <code>draw_beta_given_sigma</code>):</p>
 <p><span id="eq-gibbs"><span class="math display">\[
 \begin{aligned}
@@ -2729,7 +2729,7 @@ w_{i,t}=\exp(-h_{i,t}/2)/\sqrt{\tau_{i,t}} \text{ and prior precision } s_0^{-2}
 \text{resid}_i = y_i - X_i\beta_i.
 \end{aligned}
 \]</span></p>
-<p><strong>Adaptive thinning (D22).</strong> At short samples an equation’s own-lag chain can mix slowly (<span class="math inline">\(\beta\)</span> and the volatility path are strongly coupled). If the own-lag effective sample size falls below the convergence gate (<span class="math inline">\(50\)</span>), that equation is re-run with <span class="math inline">\(3\times\)</span> then <span class="math inline">\(9\times\)</span> thinning until it clears — the same philosophy as the UCSV Monte-Carlo-precision gate (§8); the final ESS is reported honestly.</p>
+<p><strong>Adaptive thinning (D22).</strong> At short samples an equation’s own-lag chain can mix slowly (<span class="math inline">\(\beta\)</span> and the volatility path are strongly coupled). If the own-lag effective sample size falls below the convergence gate (<span class="math inline">\(50\)</span>), that equation is re-run with <span class="math inline">\(3\times\)</span> then <span class="math inline">\(9\times\)</span> thinning until it clears — the same philosophy as the UCSV Monte-Carlo-precision gate (§13); the final ESS is reported honestly.</p>
 </section>
 </section>
 <section id="sec-covid" class="level1" data-number="7">
@@ -2798,7 +2798,7 @@ u^\ast = u + C R^\top \big(R C R^\top\big)^{-1}\,(r - R u),
 \qquad u\sim\mathcal N(0,C),
 \tag{16}\]</span></span></p>
 <p>after which the path is iterated forward with <span class="math inline">\(u^\ast\)</span> (<code>.wz_conditional_path()</code>). Because <a href="#eq-wz" class="quarto-xref">Equation 16</a> is applied <strong>per posterior draw</strong>, parameter uncertainty is retained; only the shocks are constrained. Non-conditioned variables respond to the imposed path through both the lag dynamics (<span class="math inline">\(\Psi\)</span>) and the contemporaneous error covariance (<span class="math inline">\(C\)</span>), and the un-pinned quarters of a partially-pinned variable revert to model-driven forecasts <em>consistent with</em> the pin. Unit tests confirm the pinned path binds exactly and the conditional mean/variance match the closed-form Gaussian update.</p>
-<p>The Gaussian engines (<code>gibbs</code>, <code>ss</code>, <code>conj_br</code>) use <a href="#eq-wz" class="quarto-xref">Equation 16</a> exactly (<code>conj_br</code> via the joint reduced form of §4.2). The SV engine has non-Gaussian, time-varying shock variances, so no exact Gaussian conditional exists; it falls back to hard substitution (overwrite the conditioned variable each step, logged) — the D15 approximation.</p>
+<p>The Gaussian engines (<code>gibbs</code>, <code>ss</code>, <code>conj_br</code>) use <a href="#eq-wz" class="quarto-xref">Equation 16</a> exactly (<code>conj_br</code> via the joint reduced form of §6.2). The SV engine has non-Gaussian, time-varying shock variances, so no exact Gaussian conditional exists; it falls back to hard substitution (overwrite the conditioned variable each step, logged) — the D15 approximation.</p>
 </section>
 <section id="forecast-profiles" class="level2" data-number="9.2">
 <h2 data-number="9.2" class="anchored" data-anchor-id="forecast-profiles"><span class="header-section-number">9.2</span> Forecast profiles</h2>
@@ -2810,7 +2810,7 @@ u^\ast = u + C R^\top \big(R C R^\top\big)^{-1}\,(r - R u),
 <section id="pseudo-real-time-recursive-design" class="level2" data-number="10.1">
 <h2 data-number="10.1" class="anchored" data-anchor-id="pseudo-real-time-recursive-design"><span class="header-section-number">10.1</span> Pseudo-real-time recursive design</h2>
 <p>The evaluation re-lives history (<code>run_oos_member</code>, <strong>D11</strong>). Origins are the last <code>evaluation.max_origins</code> <span class="math inline">\(=60\)</span> quarters ending at <span class="math inline">\(T-1\)</span>, starting at <span class="math inline">\(\lceil 0.45\,T\rceil\)</span> (<code>first_origin_frac</code>), i.e. ~2011 onward. At each origin <span class="math inline">\(t\)</span> <strong>every member is re-estimated on <span class="math inline">\(y_{1:t}\)</span> only</strong> — including the GLP <span class="math inline">\(\lambda\)</span> selection and the COVID scale estimation — and forecasts <span class="math inline">\(h=1,\dots,12\)</span>. This is expanding-window by default (<code>evaluation.window</code>; rolling optional). Final-vintage data is used (real-time vintages are not reliably key-free; the caveat is stated loudly, <strong>D11</strong>).</p>
-<p><strong>No look-ahead is a correctness property, not a convention.</strong> The single slice point is <code>harness_forecast()</code>; an automated test corrupts all post-origin data by <span class="math inline">\(\times 10^6\)</span> and requires bit-identical forecast draws (<code>test_no_lookahead</code>, one member per engine, including an origin whose horizon spans a COVID quarter). Combination weights at <span class="math inline">\(t\)</span> use only scores whose realization was observable by <span class="math inline">\(t\)</span> (<span class="math inline">\(s+h\le t\)</span>, §10).</p>
+<p><strong>No look-ahead is a correctness property, not a convention.</strong> The single slice point is <code>harness_forecast()</code>; an automated test corrupts all post-origin data by <span class="math inline">\(\times 10^6\)</span> and requires bit-identical forecast draws (<code>test_no_lookahead</code>, one member per engine, including an origin whose horizon spans a COVID quarter). Combination weights at <span class="math inline">\(t\)</span> use only scores whose realization was observable by <span class="math inline">\(t\)</span> (<span class="math inline">\(s+h\le t\)</span>, §11).</p>
 </section>
 <section id="point-and-density-scores" class="level2" data-number="10.2">
 <h2 data-number="10.2" class="anchored" data-anchor-id="point-and-density-scores"><span class="header-section-number">10.2</span> Point and density scores</h2>
@@ -2846,7 +2846,7 @@ u^\ast = u + C R^\top \big(R C R^\top\big)^{-1}\,(r - R u),
 \hat V = \gamma_0 + 2\sum_{l=1}^{L}\Big(1-\frac{l}{L+1}\Big)\gamma_l,\qquad
 k = \sqrt{\frac{n+1-2h+h(h-1)/n}{n}},
 \]</span></p>
-<p>with <span class="math inline">\(\gamma_l\)</span> the sample autocovariances of <span class="math inline">\(d_t\)</span>, <span class="math inline">\(L=h-1\)</span> for the quarterly/level measures and <span class="math inline">\(L=h+3\)</span> for the overlapping year-ended sums, and <span class="math inline">\(p\)</span>-values from <span class="math inline">\(t_{n-1}\)</span>. Members are compared against the AR(4) and random-walk benchmarks (<code>dm_vs_reference</code>). These losses are high-variance, so the tests have low power at long horizons — absence of significance is weak evidence.</p>
+<p>with <span class="math inline">\(\gamma_l\)</span> the sample autocovariances of <span class="math inline">\(d_t\)</span>, <span class="math inline">\(L=h-1\)</span> for the quarterly/level measures and <span class="math inline">\(L=h+2\)</span> for the overlapping year-ended sums (the Harvey small-sample correction <span class="math inline">\(k\)</span> uses the effective horizon <span class="math inline">\(h+3\)</span> for the ye measure, one more than the truncation lag), and <span class="math inline">\(p\)</span>-values from <span class="math inline">\(t_{n-1}\)</span>. Members are compared against the AR(4) and random-walk benchmarks (<code>dm_vs_reference</code>). These losses are high-variance, so the tests have low power at long horizons — absence of significance is weak evidence.</p>
 </section>
 </section>
 <section id="sec-combine" class="level1" data-number="11">
@@ -2916,7 +2916,7 @@ k = \sqrt{\frac{n+1-2h+h(h-1)/n}{n}},
 <p>The <strong>optimal pool</strong> (<code>optimal_pool_weights</code>) maximises the discounted historical <em>pooled</em> log score over the simplex, softmax-parametrised (<span class="math inline">\(w = \operatorname{softmax}(0,\theta)\)</span>) and solved by BFGS — unlike BMA it does not degenerate to a single model (“all models are false but useful”).</p>
 <p>All schemes except BMA are <strong>shrunk toward equal weights</strong> (<code>.shrink</code>, the combination-puzzle guard):</p>
 <p><span class="math display">\[
-w \leftarrow \frac{\kappa}{M} + (1-\kappa)\,w,\qquad \kappa = 0.3\ (\texttt{shrink\_kappa}),
+w \leftarrow \frac{\kappa_w}{M} + (1-\kappa_w)\,w,\qquad \kappa_w = 0.3\ (\texttt{shrink\_kappa}),
 \]</span></p>
 <p>and equal weights are used until <code>min_train_origins</code> <span class="math inline">\(=8\)</span> training origins exist.</p>
 </section>
@@ -2951,7 +2951,7 @@ w \leftarrow \frac{\kappa}{M} + (1-\kappa)\,w,\qquad \kappa = 0.3\ (\texttt{shri
 </section>
 <section id="sec-diagnostics" class="level1" data-number="14">
 <h1 data-number="14"><span class="header-section-number">14</span> Diagnostics and correctness gates</h1>
-<p>The pipeline refuses to emit results unless every §9-style property passes (<code>assert_diagnostics</code>, a hard gate):</p>
+<p>The pipeline refuses to emit results unless every property below passes (<code>assert_diagnostics</code>, a hard gate):</p>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 33%">
@@ -2978,7 +2978,7 @@ w \leftarrow \frac{\kappa}{M} + (1-\kappa)\,w,\qquad \kappa = 0.3\ (\texttt{shri
 </tr>
 <tr class="odd">
 <td>Stability</td>
-<td>companion eigenvalue share <span class="math inline">\(\rho(\mathbf A)&lt;1.05\)</span></td>
+<td>companion eigenvalue share <span class="math inline">\(\rho(\mathbf A)&lt;1.05\)</span> (<code>gibbs</code>, <code>conj_br</code>); <span class="math inline">\(\rho(\mathbf A)&lt;1.0\)</span> for <code>ss</code>, which also rejects explosive draws at the stricter threshold (<span class="math inline">\(\rho&lt;1.0\)</span> is required for <span class="math inline">\(\psi\)</span> to be the unconditional mean, §6.4)</td>
 <td>reported</td>
 </tr>
 <tr class="even">
@@ -3034,22 +3034,22 @@ w \leftarrow \frac{\kappa}{M} + (1-\kappa)\,w,\qquad \kappa = 0.3\ (\texttt{shri
 <tr class="odd">
 <td><span class="math inline">\(\lambda\)</span></td>
 <td>Minnesota overall tightness</td>
-<td><code>prior.lambda</code> (<code>auto</code>/0.05/0.4)</td>
+<td><code>prior.lambda</code> (<code>auto</code>/0.05/0.1/0.4)</td>
 </tr>
 <tr class="even">
 <td><span class="math inline">\(\kappa\)</span></td>
 <td>cross-variable shrinkage</td>
-<td><span class="math inline">\(0.5\)</span> (<code>cross</code>)</td>
+<td><span class="math inline">\(0.5\)</span> (function default, <code>minnesota_prior</code>)</td>
 </tr>
 <tr class="odd">
 <td><span class="math inline">\(\alpha\)</span></td>
 <td>lag-decay exponent</td>
-<td><span class="math inline">\(1\)</span> (<code>lag_decay</code>)</td>
+<td><span class="math inline">\(1\)</span> (function default, <code>minnesota_prior</code>)</td>
 </tr>
 <tr class="even">
 <td><span class="math inline">\(\theta_c\)</span></td>
 <td>intercept looseness</td>
-<td><span class="math inline">\(10\)</span> (<code>intercept_scale</code>)</td>
+<td><span class="math inline">\(10\)</span> (function default, <code>minnesota_prior</code>)</td>
 </tr>
 <tr class="odd">
 <td><span class="math inline">\(\underline s\)</span></td>
@@ -3087,7 +3087,7 @@ w \leftarrow \frac{\kappa}{M} + (1-\kappa)\,w,\qquad \kappa = 0.3\ (\texttt{shri
 <td><span class="math inline">\(0.95\)</span> (<code>forgetting</code>)</td>
 </tr>
 <tr class="even">
-<td><span class="math inline">\(\kappa\)</span> (combo)</td>
+<td><span class="math inline">\(\kappa_w\)</span> (combo)</td>
 <td>shrink toward equal</td>
 <td><span class="math inline">\(0.3\)</span> (<code>shrink_kappa</code>)</td>
 </tr>

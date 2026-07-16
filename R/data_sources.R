@@ -133,25 +133,40 @@ generate_synthetic_data <- function(cfg, spec) {
 # from RBA/ABS. There is deliberately NO silent series substitution: a download
 # failure errors loudly rather than swapping in a different concept.
 
+#' Guard shared by every provider branch of fetch_series: a 0-row pull (bad
+#' series id, provider outage, upstream schema change) must error here with a
+#' named provider/id rather than surface as an opaque downstream failure
+#' (merge/transform on an empty data.frame).
+.assert_nonempty <- function(df, provider, id) {
+  if (nrow(df) == 0)
+    stop(provider, " series '", id, "' returned no observations")
+  df
+}
+
 #' Pull one series from its provider; returns data.frame(date, value) at native
 #' frequency. Errors are caught by the caller.
 fetch_series <- function(v, src, cfg) {
   provider <- src$provider
   if (provider == "rba") {
     x <- readrba::read_rba(series_id = src$id)
+    x <- x[!is.na(x$value), ]
+    x <- .assert_nonempty(x, "RBA", src$id)
     data.frame(date = as.Date(x$date), value = x$value)
   } else if (provider == "abs") {
     x <- readabs::read_abs(series_id = src$id)
+    x <- x[!is.na(x$value), ]
+    x <- .assert_nonempty(x, "ABS", src$id)
     data.frame(date = as.Date(x$date), value = x$value)
   } else if (provider == "fred") {
     # key is validated and set once in download_real_data
     x <- fredr::fredr(series_id = src$id)
     x <- x[!is.na(x$value), ]
-    if (nrow(x) == 0) stop("FRED series '", src$id, "' returned no observations")
+    x <- .assert_nonempty(x, "FRED", src$id)
     data.frame(date = as.Date(x$date), value = x$value)
   } else if (provider == "dbnomics") {
     x <- rdbnomics::rdb(ids = src$id)
     x <- x[!is.na(x$value), ]
+    x <- .assert_nonempty(x, "dbnomics", src$id)
     data.frame(date = as.Date(x$period), value = x$value)
   } else stop("unknown provider: ", provider)
 }

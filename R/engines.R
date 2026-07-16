@@ -163,10 +163,21 @@ fit_conj_br <- function(y, member, spec_m, cfg, prior, weights = NULL) {
   }
   postd <- sample_conjugate(Yd, Xd, prd, n)
 
-  # diagnostics: stability of the implied joint system at posterior mean
-  Bf_bar <- postf$B1
-  stable <- mean(vapply(seq_len(min(n, 200)), function(d)
-    max_eig_mod(matrix(postf$B[d, , ], ncol = nf), nf, p) < 1.05, logical(1)))
+  # diagnostics: stability of the IMPLIED JOINT reduced form (foreign VAR
+  # substituted into the domestic conditional, per .conj_br_joint in
+  # forecast.R) -- the foreign block alone can be stable while the joint
+  # system implied by the domestic feedback is explosive.
+  # matrix(..., Kf/Kd, nf/nd) below re-establishes the 2-D shape that a bare
+  # `arr[d, , ]` silently drops whenever nf == 1 or nd == 1 (a single-variable
+  # block is a valid conj_br configuration, e.g. one foreign + one domestic).
+  Kf <- ncol(xyf$X)
+  stable <- mean(vapply(seq_len(min(n, 200)), function(d) {
+    jr <- .conj_br_joint(matrix(postf$B[d, , ], Kf, nf),
+                         matrix(postf$Sigma[d, , ], nf, nf),
+                         matrix(postd$B[d, , ], Kd, nd),
+                         matrix(postd$Sigma[d, , ], nd, nd), M, p, nf)
+    max_eig_mod(jr$B, M, p) < 1.05
+  }, logical(1)))
   own <- sapply(seq_len(nf), function(i) postf$B[, 1 + i, i])
   diag_ <- mcmc_diagnostics(own, stable)
   diag_$ess_min <- diag_$ess_median <- n     # iid draws from closed form
@@ -452,7 +463,8 @@ fit_sv <- function(y, member, spec_m, cfg, prior, weights = NULL) {
     r <- which(e$design$lag_meta$var == i & e$design$lag_meta$lag == 1)
     x <- e$beta[, 1 + r]
     if (sd(x) < 1e-12) return(NA_real_)
-    safe_ess(x)
+    ess_basic(x)   # coda-independent: the retry decision below must not
+                   # depend on an optional package (see ess_basic in utils.R)
   }
   for (i in seq_len(M)) {
     e <- run_eq(i)

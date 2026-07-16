@@ -81,9 +81,9 @@ $$
 
 The system is covariance-stationary iff $\rho(\mathbf A)\equiv\max_i
 |\lambda_i(\mathbf A)| < 1$. `max_eig_mod()` computes $\rho(\mathbf A)$; it
-drives the stability diagnostic (§11), the explosive-draw rejection in the
+drives the stability diagnostic (§14), the explosive-draw rejection in the
 steady-state sampler (§6.4), and the stationarity truncation of the AR
-benchmark (§8).
+benchmark (§13).
 
 ## The small-open-economy partition and block exogeneity {#sec-blockexog}
 
@@ -114,15 +114,15 @@ Economically, Australia is a price-taker on world activity and commodity
 prices; without @eq-blockexog the model would infer, from 30 years of
 comovement, spurious channels in which Australian variables move world
 demand — corrupting the medium-horizon dynamics that the iterated forecast
-(§7) propagates. RBA RDP 2013-06 shows imposing it materially raises the
+(§8) propagates. RBA RDP 2013-06 shows imposing it materially raises the
 measured role of foreign shocks. Three engines impose it three ways
-(§§4–6); one member (`small_unres`, **D19**) deliberately omits it as a
+(§6); one member (`small_unres`, **D19**) deliberately omits it as a
 control. The restriction constrains the **lag dynamics** only; the
 steady-state means remain coupled through $\Sigma$ (§6.4, **D3**).
 
 The posterior-mean violation
 $\max_{l}\, \| A_l^{fd}\|_{\max}$ is logged per fit
-(`block_exog_metric()`) and gated below $10^{-2}$ (§11); structural-zero
+(`block_exog_metric()`) and gated below $10^{-2}$ (§14); structural-zero
 engines report exactly $0$.
 
 # Data, transforms and target measures {#sec-data}
@@ -222,10 +222,10 @@ The four Minnesota levers:
 
 | Symbol | Role | Value | Source |
 |---|---|---|---|
-| $\lambda$ | overall tightness (own-lag sd at lag 1) | member-specific; `auto`, $0.05$, $0.4$ | §5, `prior.lambda` |
-| $\kappa$ | cross-variable shrinkage | $0.5$ | `cross` |
-| $\alpha$ | lag decay exponent ($s_0\propto l^{-\alpha}$) | $1$ | `lag_decay` |
-| $\theta_c$ | intercept looseness (multiple of $\sigma_i$) | $10$ | `intercept_scale` |
+| $\lambda$ | overall tightness (own-lag sd at lag 1) | member-specific; `auto`, $0.05$, $0.1$, $0.4$ | §5, `prior.lambda` |
+| $\kappa$ | cross-variable shrinkage | $0.5$ | function default (`minnesota_prior`) |
+| $\alpha$ | lag decay exponent ($s_0\propto l^{-\alpha}$) | $1$ | function default (`minnesota_prior`) |
+| $\theta_c$ | intercept looseness (multiple of $\sigma_i$) | $10$ | function default (`minnesota_prior`) |
 
 The scale factors $\sigma_i$ are residual standard deviations from a
 univariate AR($p$) fit to each series (`ar_sigmas()`), so shrinkage is in
@@ -316,7 +316,7 @@ roots without over-differencing. Both are applied only to level variables;
 applying them to growth rates would bias the well-estimated short-run
 dynamics (**D5**). For the block-recursive engine the dummies are split by
 block and the domestic dummy rows carry the contemporaneous-foreign columns
-(§4.2).
+(§6.2).
 
 # Data-driven shrinkage: GLP marginal-likelihood selection {#sec-glp}
 
@@ -350,13 +350,14 @@ $\log|P_1|$ is read off its Cholesky factor for stability. `select_lambda()`
 evaluates @eq-logml on the grid $\{0.05,0.1,0.15,0.2,0.3,0.4,0.6\}$
 (`glp.lambda_grid`) and returns the maximiser. Crucially this is **re-run at
 every forecast origin inside the recursive loop** on the data up to that
-origin, so the selection carries no look-ahead. Two members keep fixed
-$\lambda$ ($0.05$ tight, $0.4$ loose) for suite diversity.
+origin, so the selection carries no look-ahead. Three members keep fixed
+$\lambda$ ($0.05$ `small_tight`, $0.1$ `medium_conj`, $0.4$ `small_loose_p5`)
+for suite diversity.
 
 # Estimation engines {#sec-engines}
 
 Four engines share the interface `fit(y, member, spec, cfg) → posterior`
-and a `simulate_paths()` method (§7). Each returns draws
+and a `simulate_paths()` method (§8). Each returns draws
 $\{(B^{(d)},\Sigma^{(d)})\}_{d=1}^{N}$ (or the SV analogue) and MCMC
 diagnostics.
 
@@ -431,7 +432,7 @@ rows. This reconstruction is unit-tested against the two-stage simulation.
 
 ## Independent Normal–inverse-Wishart Gibbs engine `gibbs` {#sec-gibbs}
 
-The workhorse (§ D3 requires it for block exogeneity). Prior:
+The workhorse (**D3** requires it for block exogeneity). Prior:
 $\operatorname{vec}(B)\sim\mathcal N(b_0, V_0)$ with the **diagonal** $V_0$
 from the independent Minnesota moments (@eq-minn, so $V_0 =
 \operatorname{diag}(\operatorname{vec}(s_0)^2)$ and the block-exog spike
@@ -555,7 +556,7 @@ $$
 can mix slowly ($\beta$ and the volatility path are strongly coupled). If the
 own-lag effective sample size falls below the convergence gate ($50$), that
 equation is re-run with $3\times$ then $9\times$ thinning until it clears —
-the same philosophy as the UCSV Monte-Carlo-precision gate (§8); the final
+the same philosophy as the UCSV Monte-Carlo-precision gate (§13); the final
 ESS is reported honestly.
 
 # COVID-period treatment {#sec-covid}
@@ -708,7 +709,7 @@ exactly and the conditional mean/variance match the closed-form Gaussian
 update.
 
 The Gaussian engines (`gibbs`, `ss`, `conj_br`) use @eq-wz exactly
-(`conj_br` via the joint reduced form of §4.2). The SV engine has
+(`conj_br` via the joint reduced form of §6.2). The SV engine has
 non-Gaussian, time-varying shock variances, so no exact Gaussian conditional
 exists; it falls back to hard substitution (overwrite the conditioned
 variable each step, logged) — the D15 approximation.
@@ -743,7 +744,7 @@ slice point is `harness_forecast()`; an automated test corrupts all
 post-origin data by $\times 10^6$ and requires bit-identical forecast draws
 (`test_no_lookahead`, one member per engine, including an origin whose horizon
 spans a COVID quarter). Combination weights at $t$ use only scores whose
-realization was observable by $t$ ($s+h\le t$, §10).
+realization was observable by $t$ ($s+h\le t$, §11).
 
 ## Point and density scores
 
@@ -800,7 +801,9 @@ k = \sqrt{\frac{n+1-2h+h(h-1)/n}{n}},
 $$
 
 with $\gamma_l$ the sample autocovariances of $d_t$, $L=h-1$ for the
-quarterly/level measures and $L=h+3$ for the overlapping year-ended sums, and
+quarterly/level measures and $L=h+2$ for the overlapping year-ended sums
+(the Harvey small-sample correction $k$ uses the effective horizon $h+3$ for
+the ye measure, one more than the truncation lag), and
 $p$-values from $t_{n-1}$. Members are compared against the AR(4) and
 random-walk benchmarks (`dm_vs_reference`). These losses are high-variance, so
 the tests have low power at long horizons — absence of significance is weak
@@ -862,7 +865,7 @@ All schemes except BMA are **shrunk toward equal weights** (`.shrink`, the
 combination-puzzle guard):
 
 $$
-w \leftarrow \frac{\kappa}{M} + (1-\kappa)\,w,\qquad \kappa = 0.3\ (\texttt{shrink\_kappa}),
+w \leftarrow \frac{\kappa_w}{M} + (1-\kappa_w)\,w,\qquad \kappa_w = 0.3\ (\texttt{shrink\_kappa}),
 $$
 
 and equal weights are used until `min_train_origins` $=8$ training origins
@@ -930,14 +933,14 @@ clear (`fit_benchmark`, **D8/D9**):
 
 # Diagnostics and correctness gates {#sec-diagnostics}
 
-The pipeline refuses to emit results unless every §9-style property passes
+The pipeline refuses to emit results unless every property below passes
 (`assert_diagnostics`, a hard gate):
 
 | Property | Check | Threshold |
 |---|---|---|
 | Block exogeneity | $\max_l\|A_l^{fd}\|_{\max}$ per fit | $<10^{-2}$ (exempt: `small_unres`) |
 | MCMC convergence | own-lag effective sample size | $>50$ (or NA when `coda` absent) |
-| Stability | companion eigenvalue share $\rho(\mathbf A)<1.05$ | reported |
+| Stability | companion eigenvalue share $\rho(\mathbf A)<1.05$ (`gibbs`, `conj_br`); $\rho(\mathbf A)<1.0$ for `ss`, which also rejects explosive draws at the stricter threshold ($\rho<1.0$ is required for $\psi$ to be the unconditional mean, §6.4) | reported |
 | Forecast sanity | finite, non-explosive tails, median in a data-scaled band | pass |
 | No look-ahead | corrupt post-origin data $\Rightarrow$ identical draws | bit-identical |
 | Reproducibility | same master seed $\Rightarrow$ identical draws | bit-identical |
@@ -957,10 +960,10 @@ estimation R sources (`config_hash`), so combination experiments cost seconds
 |---|---|---|
 | $M,\ p,\ K$ | variables, lags, regressors $=1+Mp$ | `suite[].lags` |
 | $n_f,\ n_d$ | foreign / domestic block sizes | `variables[].block` |
-| $\lambda$ | Minnesota overall tightness | `prior.lambda` (`auto`/0.05/0.4) |
-| $\kappa$ | cross-variable shrinkage | $0.5$ (`cross`) |
-| $\alpha$ | lag-decay exponent | $1$ (`lag_decay`) |
-| $\theta_c$ | intercept looseness | $10$ (`intercept_scale`) |
+| $\lambda$ | Minnesota overall tightness | `prior.lambda` (`auto`/0.05/0.1/0.4) |
+| $\kappa$ | cross-variable shrinkage | $0.5$ (function default, `minnesota_prior`) |
+| $\alpha$ | lag-decay exponent | $1$ (function default, `minnesota_prior`) |
+| $\theta_c$ | intercept looseness | $10$ (function default, `minnesota_prior`) |
 | $\underline s$ | block-exog prior sd | $10^{-4}$ (`mcmc.block_exog_prior_sd`) |
 | $\delta_v$ | own-lag prior mean | `variables[].delta` |
 | $\sigma_i$ | AR-residual scale | `ar_sigmas()` |
@@ -968,7 +971,7 @@ estimation R sources (`config_hash`), so combination experiments cost seconds
 | $\psi_0,\ \text{sd}$ | steady-state anchor | `variables[].ss_mean/ss_sd` |
 | $\bar s_q,\ \rho$ | COVID scales / decay | `covid.scale_grid`, `covid.decay_grid` |
 | $\gamma$ | forgetting factor | $0.95$ (`forgetting`) |
-| $\kappa$ (combo) | shrink toward equal | $0.3$ (`shrink_kappa`) |
+| $\kappa_w$ (combo) | shrink toward equal | $0.3$ (`shrink_kappa`) |
 | $N$ | posterior / predictive draws | `mcmc.ndraw`=1500, `forecast_draws`=1000 |
 | $H$ | max horizon | $12$ (`horizons`) |
 

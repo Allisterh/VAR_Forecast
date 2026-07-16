@@ -1,37 +1,37 @@
 "scheme","variable","event","h","prob"
-"equal","gdp_growth","P(year-ended GDP growth < 0%)",1,0.00222222222222222
+"equal","gdp_growth","P(year-ended GDP growth < 0%)",1,0.00166666666666667
 "equal","gdp_growth","P(year-ended GDP growth < 0%)",2,0.0147222222222222
-"equal","gdp_growth","P(year-ended GDP growth < 0%)",3,0.0413888888888889
-"equal","gdp_growth","P(year-ended GDP growth < 0%)",4,0.0488888888888889
-"equal","gdp_growth","P(year-ended GDP growth < 0%)",5,0.0547222222222222
-"equal","gdp_growth","P(year-ended GDP growth < 0%)",6,0.0588888888888889
-"equal","gdp_growth","P(year-ended GDP growth < 0%)",7,0.0608333333333333
-"equal","gdp_growth","P(year-ended GDP growth < 0%)",8,0.0602777777777778
-"equal","gdp_growth","P(year-ended GDP growth < 0%)",9,0.0633333333333333
-"equal","gdp_growth","P(year-ended GDP growth < 0%)",10,0.0613888888888889
-"equal","gdp_growth","P(year-ended GDP growth < 0%)",11,0.0655555555555555
-"equal","gdp_growth","P(year-ended GDP growth < 0%)",12,0.0644444444444444
-"equal","cpi_inflation","P(year-ended trimmed-mean inflation in [2, 3]%)",1,0.0105555555555556
-"equal","cpi_inflation","P(year-ended trimmed-mean inflation in [2, 3]%)",2,0.1925
-"equal","cpi_inflation","P(year-ended trimmed-mean inflation in [2, 3]%)",3,0.348333333333333
-"equal","cpi_inflation","P(year-ended trimmed-mean inflation in [2, 3]%)",4,0.372777777777778
-"equal","cpi_inflation","P(year-ended trimmed-mean inflation in [2, 3]%)",5,0.388333333333333
-"equal","cpi_inflation","P(year-ended trimmed-mean inflation in [2, 3]%)",6,0.395
-"equal","cpi_inflation","P(year-ended trimmed-mean inflation in [2, 3]%)",7,0.413611111111111
-"equal","cpi_inflation","P(year-ended trimmed-mean inflation in [2, 3]%)",8,0.416944444444444
-"equal","cpi_inflation","P(year-ended trimmed-mean inflation in [2, 3]%)",9,0.416944444444444
-"equal","cpi_inflation","P(year-ended trimmed-mean inflation in [2, 3]%)",10,0.422777777777778
-"equal","cpi_inflation","P(year-ended trimmed-mean inflation in [2, 3]%)",11,0.421388888888889
-"equal","cpi_inflation","P(year-ended trimmed-mean inflation in [2, 3]%)",12,0.428888888888889
-"equal","unemp_rate","P(unemployment rises >= 0.75pp)",1,0.0547222222222222
-"equal","unemp_rate","P(unemployment rises >= 0.75pp)",2,0.0608333333333333
-"equal","unemp_rate","P(unemployment rises >= 0.75pp)",3,0.0788888888888889
-"equal","unemp_rate","P(unemployment rises >= 0.75pp)",4,0.106111111111111
-"equal","unemp_rate","P(unemployment rises >= 0.75pp)",5,0.128333333333333
-"equal","unemp_rate","P(unemployment rises >= 0.75pp)",6,0.144722222222222
-"equal","unemp_rate","P(unemployment rises >= 0.75pp)",7,0.160555555555556
-"equal","unemp_rate","P(unemployment rises >= 0.75pp)",8,0.174722222222222
-"equal","unemp_rate","P(unemployment rises >= 0.75pp)",9,0.1975
-"equal","unemp_rate","P(unemployment rises >= 0.75pp)",10,0.213055555555556
-"equal","unemp_rate","P(unemployment rises >= 0.75pp)",11,0.233888888888889
-"equal","unemp_rate","P(unemployment rises >= 0.75pp)",12,0.248055555555556
+"equal","gdp_growth","P(year-ended GDP growth < 0%)",3,0.0427777777777778
+"equal","gdp_growth","P(year-ended GDP growth < 0%)",4,0.0505555555555555
+"equal","gdp_growth","P(year-ended GDP growth < 0%)",5,0.0555555555555556
+"equal","gdp_growth","P(year-ended GDP growth < 0%)",6,0.0577777777777778
+"equal","gdp_growth","P(year-ended GDP growth < 0%)",7,0.0613888888888889
+"equal","gdp_growth","P(year-ended GDP growth < 0%)",8,0.0597222222222222
+"equal","gdp_growth","P(year-ended GDP growth < 0%)",9,0.0586111111111111
+"equal","gdp_growth","P(year-ended GDP growth < 0%)",10,0.0561111111111111
+"equal","gdp_growth","P(year-ended GDP growth < 0%)",11,0.0594444444444444
+"equal","gdp_growth","P(year-ended GDP growth < 0%)",12,0.0611111111111111
+"equal","cpi_inflation","P(year-ended trimmed-mean inflation in [2, 3]%)",1,0.0108333333333333
+"equal","cpi_inflation","P(year-ended trimmed-mean inflation in [2, 3]%)",2,0.1975
+"equal","cpi_inflation","P(year-ended trimmed-mean inflation in [2, 3]%)",3,0.351111111111111
+"equal","cpi_inflation","P(year-ended trimmed-mean inflation in [2, 3]%)",4,0.376388888888889
+"equal","cpi_inflation","P(year-ended trimmed-mean inflation in [2, 3]%)",5,0.391666666666667
+"equal","cpi_inflation","P(year-ended trimmed-mean inflation in [2, 3]%)",6,0.398333333333333
+"equal","cpi_inflation","P(year-ended trimmed-mean inflation in [2, 3]%)",7,0.417777777777778
+"equal","cpi_inflation","P(year-ended trimmed-mean inflation in [2, 3]%)",8,0.416666666666667
+"equal","cpi_inflation","P(year-ended trimmed-mean inflation in [2, 3]%)",9,0.416666666666667
+"equal","cpi_inflation","P(year-ended trimmed-mean inflation in [2, 3]%)",10,0.421388888888889
+"equal","cpi_inflation","P(year-ended trimmed-mean inflation in [2, 3]%)",11,0.418333333333333
+"equal","cpi_inflation","P(year-ended trimmed-mean inflation in [2, 3]%)",12,0.422222222222222
+"equal","unemp_rate","P(unemployment rises >= 0.75pp)",1,0.055
+"equal","unemp_rate","P(unemployment rises >= 0.75pp)",2,0.0602777777777778
+"equal","unemp_rate","P(unemployment rises >= 0.75pp)",3,0.0755555555555556
+"equal","unemp_rate","P(unemployment rises >= 0.75pp)",4,0.101111111111111
+"equal","unemp_rate","P(unemployment rises >= 0.75pp)",5,0.123333333333333
+"equal","unemp_rate","P(unemployment rises >= 0.75pp)",6,0.141388888888889
+"equal","unemp_rate","P(unemployment rises >= 0.75pp)",7,0.157777777777778
+"equal","unemp_rate","P(unemployment rises >= 0.75pp)",8,0.171388888888889
+"equal","unemp_rate","P(unemployment rises >= 0.75pp)",9,0.195
+"equal","unemp_rate","P(unemployment rises >= 0.75pp)",10,0.215833333333333
+"equal","unemp_rate","P(unemployment rises >= 0.75pp)",11,0.233055555555556
+"equal","unemp_rate","P(unemployment rises >= 0.75pp)",12,0.247222222222222

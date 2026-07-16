@@ -187,7 +187,9 @@ fit_ucsv <- function(y, cfg) {
   # must be Monte-Carlo-precise. Gate: MCSE of the trend endpoint must be
   # small relative to the one-step predictive sd. ESS values are still
   # reported. README.md D9.
-  tau_ess <- function(f) safe_ess(f$tauT)   # NA when coda is unavailable
+  # coda-independent (ess_basic, utils.R): the retry decision, mcse_ok gate
+  # and reported ess_min must not depend on an optional package.
+  tau_ess <- function(f) ess_basic(f$tauT)
   mcse_ok <- function(f) {
     e <- tau_ess(f)
     if (!is.finite(e)) return(TRUE)   # no ESS: cannot gate, so pass
@@ -197,7 +199,15 @@ fit_ucsv <- function(y, cfg) {
   }
   fits <- lapply(seq_len(ncol(y)), function(j) {
     f <- run_chain(y[, j], thin)
-    if (!mcse_ok(f)) f <- run_chain(y[, j], thin * 3)   # adaptive retry
+    # adaptive retry ladder, 3x then 9x thinning (mirrors fit_sv; README D9):
+    # spend compute to meet the MCSE bar, never relax the gate. The 9x rung
+    # exists for endpoint-outlier origins (e.g. the 2022 inflation-surge
+    # trend endpoint) where the conservative ess_basic() correctly reports a
+    # stickier chain than one 3x retry can fix.
+    for (mult in c(3L, 9L)) {
+      if (mcse_ok(f)) break
+      f <- run_chain(y[, j], thin * mult)
+    }
     f
   })
   ess_tau <- min(vapply(fits, tau_ess, numeric(1)))

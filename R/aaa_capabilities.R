@@ -5,8 +5,13 @@
 # crashing. What is lost in each case:
 #   * stochvol missing -> the SV members (small_sv, medium_minn) and the ucsv
 #     benchmark are dropped from the suite (all_members()); everything else runs.
-#   * coda missing -> the MCMC effective-sample-size diagnostic is skipped
-#     (ess_min = NA, the convergence gate auto-passes); estimates are unchanged.
+#   * coda missing -> ONLY the REPORTED mcmc_diagnostics() ESS numbers and
+#     their convergence flag are affected (ess_min = NA, the convergence gate
+#     auto-passes), for the VAR engines (conj_br/gibbs/ss/sv). It can no
+#     longer change any posterior draw: the adaptive-thinning retry decisions
+#     in fit_sv and fit_ucsv use the built-in, dependency-free ess_basic()
+#     (utils.R), not coda, so a retry either fires or doesn't identically
+#     with or without coda installed.
 #   * scoringRules missing -> forecasts are still produced and pooled with EQUAL
 #     weights, but CRPS / log-score / RMSE scoring, the DM tests and the
 #     scorecard performance tables are skipped (crps/logdens recorded as NA).
@@ -17,7 +22,7 @@
 # This file sorts first in R/ so the flags exist before any caller (including
 # parallel workers via ensure_project_loaded()). It is intentionally NOT in
 # config_hash()'s estimation-file list: it changes which members run and which
-# diagnostics are computed, but never the numerical estimate of a member that
+# diagnostics are REPORTED, but never the numerical estimate of a member that
 # does run, so it must not invalidate the OOS cache.
 
 #' TRUE if `pkg` is installed AND not force-disabled via options(soe.disable_<pkg>).

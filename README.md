@@ -148,13 +148,16 @@ Enforced and tested, not aspirational:
 ```
 config/config.yml   every knob: variables, transforms, suite, MCMC, evaluation, combination
 R/                  data_sources, transforms, priors, engines, forecast, benchmarks,
-                    evaluate, combine, covid, report, scorecard, utils;
-                    aaa_logging (logging facade -> logger optional)
+                    evaluate, combine, covid, probabilities, report, scorecard, utils;
+                    aaa_logging (logging facade -> logger optional),
+                    aaa_capabilities (optional-package flags: stochvol/coda/scoringRules)
 _targets.R          pipeline DAG (targets); parallel over origins via future/furrr
 run_all.R           clone-to-result wrapper (renv restore + targets::tar_make)
 run_all_plain.R     same pipeline without targets (for environments lacking it)
 tests/testthat/     unit tests (priors, block exogeneity, IW sampler, recursion,
                     scoring, pooling, optimiser, no-look-ahead, reproducibility)
+scripts/            one-off robustness studies, currently
+                    covid_robustness_2021q3.R
 cache/              per-(member, origin) OOS results keyed by config hash
 ```
 
@@ -476,11 +479,12 @@ h ≥ 8 looks broken. **Config:** none (structural).
 
 ### D8. The suite roster
 
-Seven VARs + four univariate anchors (see `suite` in config):
+Eight VARs + four univariate anchors (see `suite` in config):
 `small_minn` (Gibbs, GLP-λ, SOC+DIO), `small_ss` (steady-state),
 `small_sv` (SV), `small_loose_p5` (λ=0.4, p=5), `medium_minn` (13-var SV,
 p=2), `medium_conj` (13-var block-recursive conjugate, SOC+DIO),
-`small_tight` (λ=0.05 conjugate), plus `rw`, `ar4`, `ucsv`, `ucmean`.
+`small_tight` (λ=0.05 conjugate), `small_unres` (unrestricted control, D19),
+plus `rw`, `ar4`, `ucsv`, `ucmean`.
 Diversity axes per the brief: prior family, size, tightness, lag length,
 volatility model. The members genuinely fail differently: the tight small
 model is robust at long horizons, the medium SV member wins short-horizon
@@ -557,14 +561,15 @@ dynamic pool is the natural next extension. **Config:** `combination.*`.
 ### D11. Evaluation design
 
 **Choice.** Expanding window (rolling available via `evaluation.window`),
-origins = the last `max_origins` (36) quarters ending at T−1, final-vintage
+origins = starting at `first_origin_frac` (0.45) of the sample and capped at
+`max_origins` (60) quarters ending at T−1 (updated by D22), final-vintage
 data with the caveat stated loudly in the report. Scoring: RMSE, log score
 (kernel density from draws), CRPS, PIT, by horizon and variable, quarterly and
 year-ended. DM tests with Harvey correction and Newey–West (h−1) variance vs
 the AR(4) and RW anchors.
 
 **Why.** Expanding windows match how a central bank actually re-estimates;
-36 origins balances test power against compute. Real-time vintages for
+60 origins balances test power against compute. Real-time vintages for
 Australia are not reliably available key-free; pretending otherwise would be
 worse than documenting the caveat. DM rather than Giacomini–White: with an
 expanding window and these sample sizes the conditional GW adds machinery

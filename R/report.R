@@ -55,11 +55,29 @@ final_forecasts <- function(td, spec, cfg, scores) {
 #' Different variables may appear with different numbers of rows (a full
 #' path for the foreign block, one quarter for CPI/unemployment). Rows
 #' dated at/before the origin or beyond `H` are dropped with a warning.
+#' Profiles are policy inputs -- everything else fails LOUD rather than
+#' silently guessing: (a) a non-numeric 'value' cell types the whole column
+#' character in read.csv and would otherwise poison every profile (imposed
+#' flags all-FALSE, non-target echo rows dropped) with no error; (b)/(c) a
+#' duplicate (variable, h) after date->h resolution -- whether from a
+#' literal duplicate row or two dates landing in the same quarter -- would
+#' otherwise silently keep-last.
 read_forecast_profiles <- function(path, origin_date, H) {
   x <- read.csv(path, stringsAsFactors = FALSE)
   stopifnot("profiles file needs a 'variable' column" = "variable" %in% names(x),
             "profiles file needs a 'value' column" = "value" %in% names(x),
             "profiles file needs 'date' or 'h'" = any(c("date", "h") %in% names(x)))
+  raw_value <- x$value
+  x$value <- suppressWarnings(as.numeric(raw_value))
+  bad_val <- is.na(x$value) & !(is.na(raw_value) | trimws(as.character(raw_value)) == "")
+  if (any(bad_val)) {
+    has_h <- "h" %in% names(x)
+    key <- if (has_h) x$h else x$date
+    lbl <- if (has_h) "h" else "date"
+    stop("profiles file: non-numeric 'value' cell(s) -- ",
+         paste(sprintf("%s (%s=%s, value=\"%s\")", x$variable[bad_val], lbl,
+                        key[bad_val], raw_value[bad_val]), collapse = "; "))
+  }
   if (!"h" %in% names(x)) {
     x$h <- .qidx(as.Date(x$date)) - .qidx(as.Date(origin_date))
   }
@@ -69,6 +87,14 @@ read_forecast_profiles <- function(path, origin_date, H) {
     x <- x[!bad, , drop = FALSE]
   }
   if (!nrow(x)) return(NULL)
+  key <- paste(x$variable, x$h)
+  dup <- duplicated(key) | duplicated(key, fromLast = TRUE)
+  if (any(dup)) {
+    dd <- x[dup, ]
+    stop("profiles file: duplicate (variable, h) row(s) after date resolution ",
+         "-- each variable may pin at most one value per horizon: ",
+         paste(sprintf("%s at h=%d", dd$variable, dd$h), collapse = "; "))
+  }
   profiles <- lapply(split(x, x$variable), function(d) {
     p <- rep(NA_real_, H)
     p[d$h] <- d$value
@@ -120,7 +146,13 @@ conditional_forecasts <- function(td, spec, cfg,
   }
   tgt <- spec$variable[spec$target]
   fdates <- seq(origin_date, by = "quarter", length.out = H + 1)[-1]
-  pad <- function(p) c(p, rep(NA_real_, max(0, H - length(p))))[seq_len(H)]
+  # as.numeric() defence in depth (mirrors forecast.R's .norm_condition pad)
+  # for the inline `profiles:` config path, which is not routed through
+  # read_forecast_profiles()'s numeric-coercion checks.
+  pad <- function(p) {
+    p <- as.numeric(p)
+    c(p, rep(NA_real_, max(0, H - length(p))))[seq_len(H)]
+  }
   rows <- list()
   for (v in tgt) {
     all_dr <- do.call(rbind, lapply(draws, function(d) d[, , v]))

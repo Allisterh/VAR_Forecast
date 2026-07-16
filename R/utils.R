@@ -13,14 +13,37 @@ load_config <- function(path = "config/config.yml") {
   cfg
 }
 
+#' Locate the project root (the directory containing R/ and config/config.yml)
+#' by walking up from `start`. config_hash() must find the R sources no matter
+#' the caller's working directory -- testthat::test_file() runs with
+#' cwd = tests/testthat/, where a bare "R" does not resolve (previously that
+#' silently produced an EMPTY est_files list, i.e. a code-independent cache
+#' key -- exactly the silent narrowing the missing-file stop() below exists
+#' to prevent).
+project_root <- function(start = getwd()) {
+  d <- normalizePath(start)
+  for (i in 1:8) {
+    if (dir.exists(file.path(d, "R")) &&
+        file.exists(file.path(d, "config", "config.yml"))) return(d)
+    parent <- dirname(d)
+    if (parent == d) break
+    d <- parent
+  }
+  stop("project root (containing R/ and config/config.yml) not found above ", start)
+}
+
 #' Hash of the config sections that affect estimation PLUS the R sources,
 #' used to key the OOS cache (a config-only key would serve stale results
-#' after code changes).
-config_hash <- function(cfg, r_dir = "R") {
+#' after code changes). The hash covers file CONTENTS, not paths, so it is
+#' identical wherever the project is checked out.
+config_hash <- function(cfg, r_dir = file.path(project_root(), "R")) {
   est_files <- file.path(r_dir, paste0(
     c("utils", "data_sources", "transforms", "priors", "engines",
       "forecast", "benchmarks", "evaluate", "covid"), ".R"))
-  est_files <- est_files[file.exists(est_files)]
+  missing <- est_files[!file.exists(est_files)]
+  if (length(missing))
+    stop("config_hash: estimation file(s) not found: ",
+         paste(missing, collapse = ", "))
   code <- vapply(est_files,
                  function(f) digest::digest(file = f, algo = "xxhash64"), "")
   digest::digest(list(cfg[c("master_seed", "data", "synthetic", "variables",
@@ -38,6 +61,11 @@ setup_logging <- function(level = "INFO") {
 
 #' Deterministic per-task seed derived from the master seed and a string key,
 #' so parallel workers are reproducible regardless of scheduling.
+#' Uses 28 bits of the hash (substr(h, 1, 7) is a 7-hex-digit, i.e. 28-bit,
+#' slice) -- ~0.1% collision chance among the suite's ~700 task keys. Not
+#' changed here: doing so would churn every archived result's RNG stream.
+#' Acceptable because a collision only makes two tasks share an RNG stream;
+#' it does not invalidate or bias any draw.
 derive_seed <- function(master_seed, key) {
   h <- digest::digest(paste0(master_seed, "::", key), algo = "xxhash32")
   (strtoi(substr(h, 1, 7), base = 16L) + master_seed) %% .Machine$integer.max
@@ -169,6 +197,38 @@ ar_sigmas <- function(y, plag = 4, weights = NULL) {
     s <- sqrt(sum(r^2) / max(length(Y) - ncol(X), 1))
     if (!is.finite(s) || s <= 0) stats::sd(Y) else s
   }, numeric(1))
+}
+
+# MCMC helpers -----------------------------------------------------------------
+
+#' Dependency-free effective-sample-size estimator (Geyer 1992 initial
+#' positive sequence estimator). Exists because adaptive-thinning RETRY
+#' decisions (fit_sv, fit_ucsv) must not depend on whether the optional
+#' `coda` package happens to be installed: gating a retry on safe_ess()
+#' (NA without coda) would silently skip the retry and change the posterior
+#' draws under an otherwise identical seed/config/cache key, breaking the
+#' documented invariant that optional packages never change numerical
+#' estimates. mcmc_diagnostics()'s REPORTED ESS still uses coda::effectiveSize
+#' via safe_ess() -- that number is diagnostic-only and may legitimately
+#' differ (or be NA) without coda.
+ess_basic <- function(x) {
+  n <- length(x)
+  if (n < 10 || stats::sd(x) < 1e-12) return(NA_real_)
+  lag_max <- min(n - 2, 200)
+  rho <- as.numeric(stats::acf(x, lag.max = lag_max, plot = FALSE,
+                               demean = TRUE)$acf)   # rho[k+1] = rho_k, rho_0 = 1
+  m_max <- (length(rho) - 1) %/% 2
+  gsum <- 0
+  for (m in 0:m_max) {
+    i1 <- 2 * m + 1; i2 <- 2 * m + 2
+    if (i2 > length(rho)) break
+    Gm <- rho[i1] + rho[i2]
+    if (Gm <= 0) break
+    gsum <- gsum + Gm
+  }
+  tau <- 2 * gsum - 1
+  ess <- n / max(tau, 1)
+  min(max(ess, 1), n)
 }
 
 #' Quarterly date sequence helper.
